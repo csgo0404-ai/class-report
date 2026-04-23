@@ -439,8 +439,8 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <div class="color-dot" style="background:#FF5252" onclick="setColor('#FF5252',this)"></div>
               <div class="color-dot" style="background:#FF7043" onclick="setColor('#FF7043',this)"></div>
               <div class="color-dot" style="background:#FFD740" onclick="setColor('#FFD740',this)"></div>
-              <div class="color-dot" style="background:#69F0AE" onclick="setColor('#69F0AE',this)"></div>
-              <div class="color-dot" style="background:#40C4FF" onclick="setColor('#40C4FF',this)"></div>
+              <div class="color-dot" style="background:#00AA00" onclick="setColor('#00AA00',this)"></div>
+              <div class="color-dot" style="background:#0066FF" onclick="setColor('#0066FF',this)"></div>
               <div class="color-dot" style="background:#E040FB" onclick="setColor('#E040FB',this)"></div>
               <div class="color-dot" style="background:white;border:2px solid #ccc" onclick="setColor('white',this)"></div>
               <button class="tool-btn" id="eraserBtn" onclick="toggleEraser()">지우개</button>
@@ -714,6 +714,72 @@ const GEM_CATEGORIES=[
   {label:'🌟 생활 태도',color:'#E67E22',bg:'#FFF8EE',items:['감사','봉사','용기','질서','책임']},
   {label:'🤝 친구 관계',color:'#E91E8C',bg:'#FFF0F8',items:['경청','용서','존중','친절','협동']},
 ];
+
+// 월 마감
+async function toggleMonthStatus(){
+  const month=document.getElementById('tMonthSel5')?.value;
+  if(!month){alert('월을 선택하세요');return;}
+  
+  try{
+    await saengRef.child('month_status/'+month).set({
+      month:month,
+      status:'closed',
+      closed_at:Date.now(),
+      closed_by:'teacher'
+    });
+    alert('✅ '+month+' 월을 마감했습니다.');
+    loadOverview();
+  }catch(e){
+    alert('❌ 오류: '+e.message);
+  }
+}
+
+// 월 활성화
+async function openMonth(){
+  const month=document.getElementById('tMonthSel5')?.value;
+  if(!month){alert('월을 선택하세요');return;}
+  
+  try{
+    await saengRef.child('month_status/'+month).set({
+      month:month,
+      status:'active',
+      opened_at:Date.now()
+    });
+    alert('✅ '+month+' 월을 활성화했습니다.');
+    loadOverview();
+  }catch(e){
+    alert('❌ 오류: '+e.message);
+  }
+}
+
+// 학생에게 기록 전송
+async function sendToStudents(){
+  const month=document.getElementById('tMonthSel5')?.value;
+  if(!month){alert('월을 선택하세요');return;}
+  
+  try{
+    const snap=await saengRef.child('records/'+month).once('value');
+    const records=snap.val()||{};
+    let sentCount=0;
+    
+    for(const[cd,record] of Object.entries(records)){
+      if(record.status==='approved'){
+        await saengRef.child('notifications/'+cd+'/'+month).set({
+          type:'record_sent',
+          month:month,
+          message:month+' 월의 생활기록부가 완성되었습니다.',
+          sent_at:Date.now(),
+          read:false
+        });
+        sentCount++;
+      }
+    }
+    
+    alert('✅ '+sentCount+'명의 학생에게 전송했습니다.');
+  }catch(e){
+    alert('❌ 오류: '+e.message);
+  }
+}
 
 function getCurrentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
 
@@ -995,10 +1061,52 @@ function resetForm(){
 function detachMyRecordListener(){
   if(_myRecordListener&&_myRecordRef){_myRecordRef.off('value',_myRecordListener);_myRecordListener=null;_myRecordRef=null;}
 }
+// 월별 상태 확인
+async function checkMonthStatus(month){
+  const snap=await saengRef.child('month_status/'+month).once('value');
+  const status=snap.val()?.status||'active';
+  return status;
+}
+
+// 월이 활성화되어 있는지 확인
+async function isMonthActive(month){
+  const status=await checkMonthStatus(month);
+  return status==='active';
+}
+
+// 월별 상태 확인
+async function checkMonthStatus(month){
+  const snap=await saengRef.child('month_status/'+month).once('value');
+  const status=snap.val()?.status||'active';
+  return status;
+}
+
+// 월이 활성화되어 있는지 확인
+async function isMonthActive(month){
+  const status=await checkMonthStatus(month);
+  return status==='active';
+}
+
 function listenMyRecord(){
   detachMyRecordListener();
   resetForm();
   const lsKey='sw_draft_'+me.cd+'_'+currentMonth;
+  
+  // 월 상태 확인 후 기록 로드
+  checkMonthStatus(currentMonth).then(status=>{
+    if(status==='closed'){
+      setFormLocked(true);
+      document.getElementById('submitBtn').disabled=true;
+      document.getElementById('saveDraftBtn').disabled=true;
+      const banner=document.createElement('div');
+      banner.className='alert-banner';
+      banner.textContent='⛔ 이 월의 생활기록부는 마감되었습니다.';
+      banner.style.cssText='background:#FFE0E0;color:#C62828;padding:12px;margin-bottom:12px;border-radius:8px;text-align:center;';
+      const formTop=document.querySelector('#studentApp > div:nth-child(2)');
+      if(formTop) formTop.insertBefore(banner,formTop.firstChild);
+    }
+  });
+  
   _myRecordRef=saengRef.child('records/'+currentMonth+'/'+me.cd);
   _myRecordListener=_myRecordRef.on('value',snap=>{
     const d=snap.val();
@@ -1010,9 +1118,14 @@ function listenMyRecord(){
 function loadMyRecord(){listenMyRecord();}
 
 function fillForm(data){
+  // 현재월과 다른 월의 임시저장 데이터는 로드하지 않음
+  if(data.month && data.month!==currentMonth && data.status==='draft'){
+    resetForm();
+    return;
+  }
+  
   const isSubmitted=data.status==='submitted'||data.status==='approved';
-  const isRejected=data.status==='rejected';
-  document.getElementById('submittedBanner').classList.toggle('hidden',!isSubmitted);
+  const isRejected=data.status==='rejected';  document.getElementById('submittedBanner').classList.toggle('hidden',!isSubmitted);
   document.getElementById('rejectedBanner').classList.toggle('hidden',!isRejected);
   if(isRejected&&data.rejected_reason) document.getElementById('rejectedReason').textContent=data.rejected_reason;
   // 반려 시: 폼 잠금 유지 + 반려 알림창 표시 (미확인 시)
@@ -1207,8 +1320,12 @@ function undoCanvas(){if(_canvasHistIdx>0){_canvasHistIdx--;restoreCanvasState(_
 function redoCanvas(){if(_canvasHistIdx<_canvasHistory.length-1){_canvasHistIdx++;restoreCanvasState(_canvasHistory[_canvasHistIdx]);}}
 function makePencilCursor(size){
   const s=Math.max(16,Math.min(40,size+12));
-  return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${s}' height='${s}' viewBox='0 0 24 24'%3E%3Cpath fill='%23444' d='M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'/%3E%3C/svg%3E") 0 ${s}, crosshair`;
+  const half=Math.round(s/2);
+  return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${s}' height='${s}' viewBox='0 0 ${s} ${s}'%3E%3Ccircle cx='${half}' cy='${half}' r='${half-2}' fill='none' stroke='%23333' stroke-width='1'/%3E%3C/svg%3E") ${half} ${half}, crosshair`;
 }
+
+
+
 function makeEraserCursor(size){
   const s=Math.max(16,Math.min(60,size*3+8));
   const half=Math.round(s/2);
