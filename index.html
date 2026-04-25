@@ -586,6 +586,11 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <button class="danger-sm del" style="background:linear-gradient(135deg,#FFA726,#EF6C00);" onclick="document.getElementById('importBackupFile').click()">📥 불러오기</button>
         <input id="importBackupFile" type="file" accept=".json,application/json" style="display:none;" onchange="importBackup(event)">
       </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed #FFD6E0;">
+        <span style="font-size:13px;color:#888;">버전:</span>
+        <button class="danger-sm del" style="background:linear-gradient(135deg,#FF7BA9,#E91E63);" onclick="forceClientReload()">🔄 학생 강제 새로고침</button>
+        <span style="font-size:12px;color:#bbb;">새 버전을 깃허브에 올린 후 누르면 학생 화면이 자동 새로고침됩니다</span>
+      </div>
     </div>
     <!-- 2. 학생 명단 -->
     <div class="setting-section">
@@ -1153,6 +1158,7 @@ async function showStudentApp(){
   });
   listenBuzzer();
   listenTimerStudent();
+  listenForceReload();
 }
 async function showTeacherApp(){
   document.getElementById('loginScreen').classList.add('hidden');
@@ -1727,6 +1733,27 @@ function selectGift(type,el){
 }
 
 // ═══ 부저 (학생) ═══
+// ═══ 강제 새로고침 ═══
+let _myReloadStamp=null;
+function listenForceReload(){
+  saengRef.child('force_reload').on('value',snap=>{
+    const stamp=snap.val();
+    if(!stamp) return;
+    if(_myReloadStamp===null){_myReloadStamp=stamp;return;}
+    if(stamp!==_myReloadStamp){
+      _myReloadStamp=stamp;
+      // 캐시 우회 새로고침
+      const url=new URL(location.href);
+      url.searchParams.set('v',stamp);
+      location.replace(url.toString());
+    }
+  });
+}
+async function forceClientReload(){
+  if(!confirm('모든 학생 화면을 강제 새로고침하시겠어요?\n(저장 안 된 작성 중 내용은 사라질 수 있어요)')) return;
+  await saengRef.child('force_reload').set(Date.now());
+  toast('🔄 새로고침 신호 전송됨');
+}
 function listenBuzzer(){
   saengRef.child('buzzer').on('value',snap=>{
     const data=snap.val()||{};
