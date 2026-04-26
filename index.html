@@ -484,10 +484,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <div class="gift-options">
           <div class="gift-option selected" data-gift="cookie" onclick="selectGift('cookie',this)">🍪 간식 (5쿠키)</div>
           <div class="gift-option" data-gift="마음" onclick="selectGift('마음',this)">
-            ♥️ ( <input id="giftHeartText" class="gift-custom-input" placeholder="어떤" onclick="event.stopPropagation();selectGift('직접 입력',this.closest('.gift-option'))"> ) 마음
-          </div>
-          <div class="gift-option" data-gift="기타" onclick="selectGift('기타',this)">
-            ⭐️ 기타: <input id="giftEtcText" class="gift-custom-input" placeholder="직접 입력" onclick="event.stopPropagation();selectGift('기타',this.closest('.gift-option'))">
+            ❤️ 마음 : <input id="giftHeartText" class="gift-custom-input" placeholder="직접 입력" onclick="event.stopPropagation();selectGift('마음',this.closest('.gift-option'))">
           </div>
         </div>
       </div>
@@ -970,6 +967,7 @@ async function renderMonthManageList(){
       <button class="pink-btn soft" onclick="renameMonth('${esc}')">수정</button>
       <button class="pink-btn soft" onclick="toggleHideMonth('${esc}')">${hideLabel}</button>
       <button class="pink-btn" onclick="clickMonthToggleFor('${esc}')">${statusLabel}</button>
+      <button class="pink-btn" onclick="bulkApproveMonth('${esc}')">승인</button>
       <button class="pink-btn" onclick="openDeliveryModalFor('${esc}')">발송</button>
       <button class="pink-btn deep" onclick="confirmDeleteMonth('${esc}')">삭제</button>
     </div>`;
@@ -997,6 +995,83 @@ async function onMonthDrop(e,targetVal){
   renderMonthManageList();
   populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
 }
+async function bulkApproveMonth(month){
+  const ok=await prettyConfirm({title:'일괄 승인',icon:'✅',body:`<b>${_monthsCache[month]||month}</b>의 제출/임시저장된 모든 학생 기록과<br>방어자/유망주/달고나를 일괄 승인할까요?`,okText:'승인하기'});
+  if(!ok) return;
+  const recSnap=await saengRef.child('records/'+month).once('value');
+  const recs=recSnap.val()||{};
+  let cnt=0, skipped=0;
+  for(const cd of Object.keys(recs)){
+    const r=recs[cd];
+    if(!r){skipped++;continue;}
+    if(r.status==='approved'){skipped++;continue;}
+    // 1) records 승인
+    await saengRef.child('records/'+month+'/'+cd).update({status:'approved',rejected_reason:''});
+    // 2) draft 학생 대비: records 데이터로 nomination/dalgona 없으면 생성
+    await ensureNominationsAndDalgonaForRecord(cd,month,r);
+    // 3) pending 항목 일괄 승인
+    await autoApproveRelated(cd,month);
+    cnt++;
+  }
+  if(cnt===0){
+    alert(`승인할 기록이 없습니다.\n(이미 승인된 ${skipped}건)`);
+  }else{
+    toast(`✅ ${cnt}명 일괄 승인 완료${skipped?` (이미 승인 ${skipped}건 건너뜀)`:''}`);
+    loadOverview();
+  }
+}
+
+// records 데이터로 nomination/dalgona가 없으면 생성 (작성만 하고 제출 안 한 학생 대비)
+async function ensureNominationsAndDalgonaForRecord(cd, month, rec){
+  if(!rec) return;
+  const stuName=getStudentName(cd)||rec.student_name||'';
+  // 빈 문자열 trim 처리 — 학생이 select 안 한 경우는 ''
+  const defTo=String(rec.defender_to||'').trim();
+  const proTo=String(rec.promising_to||'').trim();
+  const dalTo=String(rec.dalgona_to||'').trim();
+  if(defTo){
+    const key=month+'_'+cd+'_defender';
+    const snap=await saengRef.child('nominations/'+key).once('value');
+    if(!snap.exists()){
+      await saengRef.child('nominations/'+key).set({type:'defender',from:cd,from_name:stuName,to:defTo,to_name:getStudentName(defTo),reason:rec.defender_reason||'',status:'pending',month,created_at:Date.now()});
+    }else{
+      // 기존 record의 month/type 필드 누락 시 보정
+      const v=snap.val()||{};
+      const fix={};
+      if(v.month!==month) fix.month=month;
+      if(!v.type) fix.type='defender';
+      if(Object.keys(fix).length) await saengRef.child('nominations/'+key).update(fix);
+    }
+  }
+  if(proTo){
+    const key=month+'_'+cd+'_promising';
+    const snap=await saengRef.child('nominations/'+key).once('value');
+    if(!snap.exists()){
+      await saengRef.child('nominations/'+key).set({type:'promising',from:cd,from_name:stuName,to:proTo,to_name:getStudentName(proTo),reason:rec.promising_reason||'',status:'pending',month,created_at:Date.now()});
+    }else{
+      const v=snap.val()||{};
+      const fix={};
+      if(v.month!==month) fix.month=month;
+      if(!v.type) fix.type='promising';
+      if(Object.keys(fix).length) await saengRef.child('nominations/'+key).update(fix);
+    }
+  }
+  if(dalTo){
+    const key=month+'_'+cd+'_dalgona';
+    const snap=await saengRef.child('dalgona/'+key).once('value');
+    if(!snap.exists()){
+      await saengRef.child('dalgona/'+key).set({from:cd,from_name:stuName,to:dalTo,to_name:getStudentName(dalTo),message:rec.dalgona_msg||'',gift:rec.dalgona_gift||'cookie',gift_heart:rec.dalgona_heart||'',gift_etc:rec.dalgona_etc||'',drawingRef:'student_'+cd+'_'+month,status:'pending',month,created_at:Date.now()});
+    }else{
+      const v=snap.val()||{};
+      const fix={};
+      if(v.month!==month) fix.month=month;
+      // drawing 필드는 이제 drawingRef로 통일
+      if(!v.drawingRef) fix.drawingRef='student_'+cd+'_'+month;
+      if(Object.keys(fix).length) await saengRef.child('dalgona/'+key).update(fix);
+    }
+  }
+}
+
 async function clickMonthToggleFor(month){
   const snap=await saengRef.child('month_status/'+month).once('value');
   const status=snap.val()?.status;
@@ -1124,7 +1199,6 @@ function logout(){
   ['lackReason','fullReason','growthPlan','mySecret','teacherMsg','defenderReason','promisingReason','dalgonaMsg'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   ['defenderSelect','promisingSelect','dalgonaTo'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('giftHeartText').value='';
-  document.getElementById('giftEtcText').value='';
   document.querySelectorAll('.gift-option').forEach(o=>{o.classList.toggle('selected',o.dataset.gift==='cookie');});
   document.querySelectorAll('.gem-chip').forEach(el=>el.classList.remove('selected'));
   // 캔버스 초기화
@@ -1311,6 +1385,8 @@ function autoSave(){
   const sb=document.getElementById('submittedBanner');
   const isSubmittedUI=sb&&!sb.classList.contains('hidden');
   if(isSubmittedUI) delete draft.status;
+  // dalgona_drawing은 더 이상 records에 저장 안 함 (drawings 노드 분리)
+  delete draft.dalgona_drawing;
   try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify(draft));}catch(e){}
   clearTimeout(autoSaveTimer);
   autoSaveTimer=setTimeout(()=>{
@@ -1335,8 +1411,9 @@ function collectFormData(status){
     dalgona_msg:document.getElementById('dalgonaMsg').value,
     dalgona_gift:currentGift,
     dalgona_heart:document.getElementById('giftHeartText').value,
-    dalgona_etc:document.getElementById('giftEtcText').value,
-    dalgona_drawing:getCanvasData(),
+    dalgona_etc:'',
+    // dalgona_drawing은 records에 저장 안 함 — drawings 노드로 분리
+    dalgona_drawing_id:me?'student_'+me.cd+'_'+currentMonth:'',
     status:status||'draft',
     student_name:me.nm,
     month:currentMonth
@@ -1357,7 +1434,7 @@ function resetForm(){
   currentGift='cookie';
   document.querySelectorAll('.gift-option').forEach(o=>o.classList.toggle('selected',o.dataset.gift==='cookie'));
   if(canvas&&ctx){ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);}
-  _canvasUserDirty=false;
+  _canvasUserDirty=false;_pendingCanvasData=null;
   document.getElementById('submittedBanner').classList.add('hidden');
   document.getElementById('rejectedBanner').classList.add('hidden');
   const sb=document.getElementById('submitBtn');const db=document.getElementById('saveDraftBtn');
@@ -1411,10 +1488,7 @@ function listenMyRecord(){
     if(!d){try{localStorage.removeItem(lsKey);}catch(e){}resetForm();return;}
     try{localStorage.setItem(lsKey,JSON.stringify(d));}catch(e){}
     fillForm(d);
-    // 교사가 승인/반려한 경우 학생 확인 시각 갱신 (한 번만)
-    if((d.status==='approved'||d.status==='rejected')&&d.updated_at&&(!d.student_viewed_at||d.student_viewed_at<d.updated_at)){
-      _myRecordRef.child('student_viewed_at').set(Date.now()).catch(()=>{});
-    }
+    // 학생 확인은 이벤트 상점의 [확인] 버튼 클릭으로만 갱신됨 (자동 X)
   });
 }
 function loadMyRecord(){listenMyRecord();}
@@ -1459,9 +1533,40 @@ function fillForm(data){
   document.getElementById('promisingSelect').value=data.promising_to||'';
   document.getElementById('dalgonaTo').value=data.dalgona_to||'';
   if(data.dalgona_gift) selectGift(data.dalgona_gift,document.querySelector(`[data-gift="${data.dalgona_gift}"]`));
-  document.getElementById('giftHeartText').value=data.dalgona_heart||'';
-  document.getElementById('giftEtcText').value=data.dalgona_etc||'';
-  if(data.dalgona_drawing&&!_canvasUserDirty) loadCanvasFromData(data.dalgona_drawing);
+  const _gh=document.getElementById('giftHeartText'); if(_gh) _gh.value=data.dalgona_heart||'';
+  const _ge=document.getElementById('giftEtcText'); if(_ge) _ge.value=data.dalgona_etc||'';
+  // 캔버스 복원: 우선순위 ClassData/EventShop/drawings/student_{cd}_{month} > records.dalgona_drawing(레거시) > localStorage 백업
+  if(me){
+    const drawingId='student_'+me.cd+'_'+currentMonth;
+    const restoreNow=src=>{
+      if(!src) return;
+      if(!canvas){ _pendingCanvasData=src; return; }
+      if(isRejected||!_canvasUserDirty||isCanvasBlank()){
+        loadCanvasFromData(src);
+        _canvasUserDirty=false;
+      }
+    };
+    firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).once('value').then(snap=>{
+      const remote=snap.val();
+      if(remote){ restoreNow(remote); return; }
+      // 레거시 records.dalgona_drawing → drawings 노드로 마이그레이션
+      if(data.dalgona_drawing){
+        firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(data.dalgona_drawing).catch(()=>{});
+        // records의 base64 제거 + drawingRef로 교체 (1회 마이그레이션)
+        saengRef.child('records/'+currentMonth+'/'+me.cd).update({dalgona_drawing:null,dalgona_drawing_id:drawingId}).catch(()=>{});
+        restoreNow(data.dalgona_drawing);
+        return;
+      }
+      // localStorage fallback
+      try{
+        const local=localStorage.getItem('sw_canvas_'+me.cd+'_'+currentMonth);
+        if(local){
+          firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(local).catch(()=>{});
+          restoreNow(local);
+        }
+      }catch(e){}
+    }).catch(()=>{});
+  }
   // 글자수 업데이트
   ['lackReason','fullReason','growthPlan','mySecret','teacherMsg','defenderReason','promisingReason','dalgonaMsg'].forEach(id=>{
     const ta=document.getElementById(id);
@@ -1507,6 +1612,14 @@ async function saveRecord(status='draft'){
   if(status==='submitted') clearTimeout(autoSaveTimer); // 경쟁 방지
   const data=collectFormData(status);
   if(status==='submitted') data.submitted_at=Date.now();
+  // dalgona_drawing은 records에 저장 안 함 (drawings 노드 분리)
+  delete data.dalgona_drawing;
+  // 제출 시 그림이 있다면 drawings 노드에 즉시 동기화
+  if(status==='submitted'&&!isCanvasBlank()){
+    const drawingId='student_'+me.cd+'_'+currentMonth;
+    await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(getCanvasData()).catch(()=>{});
+    data.dalgona_drawing_id=drawingId;
+  }
   await saengRef.child('records/'+currentMonth+'/'+me.cd).update({...data,updated_at:Date.now()});
   localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...data,updated_at:Date.now()}));
   if(status==='submitted'){
@@ -1530,7 +1643,8 @@ async function saveNominationsAndDalgona(data){
     await saengRef.child('nominations/'+currentMonth+'_'+me.cd+'_promising').set({type:'promising',from:me.cd,from_name:me.nm,to:proTo,to_name:getStudentName(proTo),reason:data.promising_reason,status:'pending',month:currentMonth,created_at:Date.now()});
   }
   if(dalTo){
-    await saengRef.child('dalgona/'+currentMonth+'_'+me.cd+'_dalgona').set({from:me.cd,from_name:me.nm,to:dalTo,to_name:getStudentName(dalTo),message:data.dalgona_msg,gift:data.dalgona_gift,gift_heart:data.dalgona_heart,gift_etc:data.dalgona_etc,drawing:data.dalgona_drawing,status:'pending',month:currentMonth,created_at:Date.now()});
+    const drawingId='student_'+me.cd+'_'+currentMonth;
+    await saengRef.child('dalgona/'+currentMonth+'_'+me.cd+'_dalgona').set({from:me.cd,from_name:me.nm,to:dalTo,to_name:getStudentName(dalTo),message:data.dalgona_msg,gift:data.dalgona_gift,gift_heart:data.dalgona_heart,gift_etc:data.dalgona_etc,drawingRef:drawingId,status:'pending',month:currentMonth,created_at:Date.now()});
   }
 }
 
@@ -1546,6 +1660,10 @@ function clearAllErrors(){
   document.querySelectorAll('#studentApp textarea,#studentApp select,#studentApp input').forEach(el=>{el.style.border='';el.style.background='';});
 }
 async function submitRecord(){
+  // IME 조합 중인 textarea blur → 마지막 한글 commit. 다음 tick에 검사.
+  const _ae=document.activeElement;
+  if(_ae && (_ae.tagName==='TEXTAREA'||_ae.tagName==='INPUT')) _ae.blur();
+  await new Promise(r=>setTimeout(r,10));
   clearAllErrors();
   const defSel=document.getElementById('defenderSelect').value;
   const proSel=document.getElementById('promisingSelect').value;
@@ -1568,13 +1686,15 @@ async function submitRecord(){
     if(el&&!el.value.trim()){markError(el);errors.push(label+' 칸이 비어있어요');if(!firstEl)firstEl=el;}
   });
 
-  // 최소 글자 수 미달 (charLimits = 최소 글자 수)
+  // 최소 글자 수 미달 (charLimits = 최소 글자 수). countChars 표시와 동일한 길이(value.length) 사용
   for(const[id,min] of Object.entries(charLimits)){
     if(!min) continue;
     const ta=document.getElementById(id);
-    if(ta&&ta.value.trim().length>0&&ta.value.trim().length<min){
+    if(!ta) continue;
+    const len=ta.value.length;
+    if(ta.value.trim().length>0 && len<min){
       markError(ta);
-      errors.push(`⚠️ ${fieldLabel[id]||id} 내용이 너무 짧아요 (최소 ${min}자, 현재 ${ta.value.trim().length}자)`);
+      errors.push(`⚠️ ${fieldLabel[id]||id} 내용이 너무 짧아요 (최소 ${min}자, 현재 ${len}자)`);
       if(!firstEl)firstEl=ta;
     }
   }
@@ -1594,11 +1714,36 @@ async function submitRecord(){
     errors.push('🎨 그림 선물에 그림을 그려주세요');
     if(!firstEl) firstEl=cv;
   }
+  if(dalSel&&currentGift==='마음'){
+    const heartEl=document.getElementById('giftHeartText');
+    if(heartEl&&!heartEl.value.trim()){
+      markError(heartEl);
+      errors.push('❤️ 마음 선물의 내용을 입력해주세요');
+      if(!firstEl) firstEl=heartEl;
+    }
+  }
 
   if(errors.length>0){
     if(firstEl) firstEl.scrollIntoView({behavior:'smooth',block:'center'});
     showSubmitErrorModal(errors);
     return;
+  }
+
+  // 달고나 간식(쿠키 5개) 잔액 확인
+  if(dalSel && currentGift==='cookie' && me){
+    try {
+      const stuSnap = await shopRef.child('stu').once('value');
+      let stuArr = stuSnap.val()||[];
+      if(!Array.isArray(stuArr)) stuArr = Object.values(stuArr);
+      const myStu = stuArr.find(s=>s && String(s.cd).trim()===String(me.cd).trim());
+      if(myStu){
+        const avail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
+        if(avail < 5){
+          showSubmitErrorModal([`🍪 쿠키가 부족해요! (보유 ${Math.max(0,avail)}개 / 필요 5개)\n달고나 간식 대신 다른 선물을 선택해주세요.`]);
+          return;
+        }
+      }
+    } catch(e) { console.error('쿠키 잔액 확인 실패', e); }
   }
 
   showSubmitConfirmModal();
@@ -1620,7 +1765,7 @@ function getStudentName(cd){
 }
 
 // ═══ 캔버스 ═══
-let canvas,ctx,drawing=false,erasing=false,brushColor='#333',_canvasUserDirty=false;
+let canvas,ctx,drawing=false,erasing=false,brushColor='#333',_canvasUserDirty=false,_pendingCanvasData=null;
 let _canvasHistory=[],_canvasHistIdx=-1;
 function saveCanvasState(){
   _canvasHistory=_canvasHistory.slice(0,_canvasHistIdx+1);
@@ -1686,7 +1831,23 @@ function initCanvas(){
     ctx.lineTo(p.x,p.y);ctx.stroke();
     ctx.beginPath();ctx.moveTo(p.x,p.y);
   };
-  const end=()=>{if(drawing){drawing=false;saveCanvasState();}};
+  const end=()=>{
+    if(drawing){
+      drawing=false;saveCanvasState();autoSave();
+      // 그림 백업: localStorage + Firebase drawings 노드 (debounce 1초)
+      if(me){
+        const data=getCanvasData();
+        try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
+        clearTimeout(window._drawingSyncTimer);
+        window._drawingSyncTimer=setTimeout(()=>{
+          const drawingId='student_'+me.cd+'_'+currentMonth;
+          firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(data).catch(()=>{});
+          // records에 drawingRef 표시 (없으면 추가)
+          saengRef.child('records/'+currentMonth+'/'+me.cd+'/dalgona_drawing_id').set(drawingId).catch(()=>{});
+        },1000);
+      }
+    }
+  };
   canvas.addEventListener('mousedown',start);canvas.addEventListener('mousemove',move);
   canvas.addEventListener('mouseup',end);canvas.addEventListener('mouseleave',end);
   canvas.addEventListener('touchstart',start,{passive:false});
@@ -1697,6 +1858,12 @@ function initCanvas(){
     if((e.ctrlKey||e.metaKey)&&e.key==='z'){e.preventDefault();undoCanvas();}
     if((e.ctrlKey||e.metaKey)&&(e.key==='y'||(e.shiftKey&&e.key==='z'))){e.preventDefault();redoCanvas();}
   });
+  // fillForm fetch가 캔버스 init보다 빨리 끝났던 경우 보관해둔 데이터 적용
+  if(_pendingCanvasData){
+    loadCanvasFromData(_pendingCanvasData);
+    _pendingCanvasData=null;
+    _canvasUserDirty=false;
+  }
 }
 function setColor(c,el){
   brushColor=c;erasing=false;
@@ -2058,26 +2225,55 @@ function loadOverview(forceToast){
   },1000);
   if(forceToast===true) toast('🔄 새로고침');
 }
+window._overviewSort={col:'no',dir:1};
+window.sortOverview=function(col){
+  if(window._overviewSort.col===col) window._overviewSort.dir*=-1;
+  else { window._overviewSort.col=col; window._overviewSort.dir=1; }
+  loadOverview();
+};
 function renderOverview(records,month){
   const students=(shopData&&shopData.stu)||[];
   const titleEl=document.getElementById('overviewTitle');
   if(titleEl) titleEl.textContent='학생별 제출 현황';
-  let html=`<table class="status-table"><thead><tr><th>이름</th><th>상태</th><th>제출 시간</th><th>확인</th><th>발송</th></tr></thead><tbody>`;
-  students.filter(s=>s.nm).forEach(s=>{
+  const sortCol=window._overviewSort?.col||'no';
+  const sortDir=window._overviewSort?.dir||1;
+  let html=`<table class="status-table"><thead><tr><th style="cursor:pointer;user-select:none;" onclick="sortOverview('nm')">이름</th><th style="cursor:pointer;user-select:none;" onclick="sortOverview('status')">상태</th><th style="cursor:pointer;user-select:none;" onclick="sortOverview('time')">제출 시간</th><th style="cursor:pointer;user-select:none;" onclick="sortOverview('confirm')">확인</th><th>발송</th></tr></thead><tbody>`;
+  // 학생을 정렬용 데이터로 변환
+  const statusOrder={none:0,draft:1,submitted:2,rejected:3,approved:4};
+  const rows=students.filter(s=>s.nm).map(s=>{
     const r=records[s.cd]||records[String(s.cd)]||records[Number(s.cd)];
     const status=r?(r.status||'none'):'none';
+    const time=r&&r.submitted_at?r.submitted_at:0;
+    let confirmRank=0;
+    if(r&&r.record_delivered_at){
+      const seen=r.student_viewed_at||0;
+      confirmRank=seen>=r.record_delivered_at?2:1;
+    }
+    return {s,r,status,time,confirmRank};
+  });
+  rows.sort((a,b)=>{
+    let cmp=0;
+    if(sortCol==='nm') cmp=(a.s.nm||'').localeCompare(b.s.nm||'','ko');
+    else if(sortCol==='status') cmp=(statusOrder[a.status]||0)-(statusOrder[b.status]||0);
+    else if(sortCol==='time') cmp=a.time-b.time;
+    else if(sortCol==='confirm') cmp=b.confirmRank-a.confirmRank; // 확인된 것부터
+    else cmp=(parseInt(a.s.no)||0)-(parseInt(b.s.no)||0);
+    return cmp*sortDir;
+  });
+  rows.forEach(({s,r,status})=>{
     const badgeMap={none:'미작성',draft:'임시저장',submitted:'제출완료',approved:'승인완료',rejected:'반려됨'};
     const classMap={none:'draft',draft:'draft',submitted:'submitted',approved:'approved',rejected:'rejected'};
     const time=r&&r.submitted_at?new Date(r.submitted_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
-    // 확인 여부: 학생이 본 시점이 마지막 업데이트 이후이면 확인됨
-    let confirmCell='-';
-    if(r&&(status==='approved'||status==='rejected')){
-      const upd=r.updated_at||0;
+    // 확인 여부: 학생이 이벤트 상점에서 [확인] 버튼을 누른 시점 기준
+    let confirmCell='<span style="color:#bbb;font-size:12px;">-</span>';
+    if(r&&r.record_delivered_at){
       const seen=r.student_viewed_at||0;
-      if(seen>=upd&&seen>0){
-        confirmCell=`<span style="color:#43A047;font-weight:bold;">✅ 확인</span>`;
+      if(seen>=r.record_delivered_at){
+        const seenDate=new Date(seen);
+        const seenStr=`${seenDate.getMonth()+1}/${seenDate.getDate()} ${String(seenDate.getHours()).padStart(2,'0')}:${String(seenDate.getMinutes()).padStart(2,'0')}`;
+        confirmCell=`<span title="확인 시각: ${seenStr}" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-weight:bold;padding:5px 16px;border-radius:14px;font-size:13px;box-shadow:0 3px 8px rgba(255,123,169,.4);">확인</span>`;
       }else{
-        confirmCell=`<span style="color:#E53935;font-weight:bold;">⏳ 미확인</span>`;
+        confirmCell=`<span style="display:inline-flex;align-items:center;background:#FFF0F5;color:#FF5C8D;font-weight:bold;padding:5px 16px;border-radius:14px;font-size:13px;border:2px dashed #FFB1CB;">미확인</span>`;
       }
     }
     const canSend=status==='approved';
@@ -2123,7 +2319,7 @@ function showStatusMini(cd,month,event){
     const statusCls={draft:'draft',submitted:'submitted',approved:'approved',rejected:'rejected'}[r.status]||'draft';
     const nomLbl=(n)=>n?({pending:'대기중',approved:'승인됨',rejected:'반려됨'}[n.status]||n.status):'없음';
     const nomCls=(n)=>n?n.status:'draft';
-    const giftText=!dal?'-':dal.gift==='cookie'?'🍪 간식(5쿠키)':dal.gift==='마음'?`💖 ${dal.gift_heart||''} 마음`:`✨ ${dal.gift_etc||''}`;
+    const giftText=!dal?'-':dal.gift==='cookie'?'🍪 간식(5쿠키)':`❤️ 마음 : ${dal.gift_heart||''}`;
 
     const monthLabel=month.split('-')[1]+'월';
     const miniHeader=`
@@ -2164,7 +2360,7 @@ function showStatusMini(cd,month,event){
           <span>→ <b>${dal.to_name||'?'}</b> | ${giftText}</span>
           <span class="status-badge ${nomCls(dal)}" style="font-size:11px;">${nomLbl(dal)}</span>
         </div>
-        ${dal.drawing?`<img src="${dal.drawing}" style="max-height:80px;border-radius:8px;margin-bottom:4px;">`:''}
+        ${(dal.drawingRef||dal.drawing)?`<img ${dal.drawing?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:80px;border-radius:8px;margin-bottom:4px;">`:''}
         <div style="color:#555;">${dal.message||''}</div>
       </div>`;
 
@@ -2182,6 +2378,7 @@ function showStatusMini(cd,month,event){
       sec('🍬 달고나',dalCard,'#E65100')+
       (r.status==='rejected'&&r.rejected_reason?`<div style="background:#FFF3E0;border-radius:10px;padding:8px 12px;font-size:12px;color:#E65100;margin-bottom:8px;margin-top:4px;">반려 메시지: ${r.rejected_reason}</div>`:'')+
       footer;
+    hydrateDrawings(document.getElementById('statusMiniContent'));
   });
 }
 async function updateNomFromMini(key,status,cd,month){
@@ -2196,7 +2393,10 @@ async function updateDalgonaFromMini(key,status,cd,month){
 }
 async function approveRecordFromMini(cd,month){
   await saengRef.child('records/'+month+'/'+cd).update({status:'approved',rejected_reason:''});
-  // 관련 방어자/유망주/달고나도 pending 상태면 함께 승인
+  // records 데이터로 nomination/dalgona record 없으면 생성
+  const recSnap=await saengRef.child('records/'+month+'/'+cd).once('value');
+  await ensureNominationsAndDalgonaForRecord(cd,month,recSnap.val());
+  // pending 항목 일괄 승인 + type 누락 보정
   await autoApproveRelated(cd,month);
   toast('✅ 승인 완료');
   showStatusMini(cd,month,null);
@@ -2208,16 +2408,35 @@ async function autoApproveRelated(cd,month){
   for(const k of keys){
     const snap=await saengRef.child('nominations/'+k).once('value');
     const v=snap.val();
-    if(v&&v.status==='pending') updates.push(saengRef.child('nominations/'+k).update({status:'approved'}));
+    if(v&&(v.status==='pending'||!v.status)){
+      const fix={status:'approved'};
+      if(!v.type) fix.type=k.endsWith('_promising')?'promising':'defender';
+      updates.push(saengRef.child('nominations/'+k).update(fix));
+    }
   }
   const dSnap=await saengRef.child('dalgona/'+dKey).once('value');
   const dv=dSnap.val();
-  if(dv&&dv.status==='pending') updates.push(saengRef.child('dalgona/'+dKey).update({status:'approved'}));
+  if(dv&&(dv.status==='pending'||!dv.status)) updates.push(saengRef.child('dalgona/'+dKey).update({status:'approved'}));
   await Promise.all(updates);
 }
 function closeStatusMini(){
   document.getElementById('statusMini').classList.add('hidden');
   document.getElementById('statusMiniOverlay').classList.add('hidden');
+}
+
+function hydrateDrawings(root){
+  if(!root) return;
+  const imgs=root.querySelectorAll('img[data-drawing-ref]');
+  imgs.forEach(img=>{
+    const ref=img.getAttribute('data-drawing-ref');
+    if(!ref) return;
+    if(img.getAttribute('src')) return;
+    firebase.database().ref('ClassData/EventShop/drawings/'+ref).once('value').then(s=>{
+      const v=s.val();
+      if(v) img.src=v;
+      else img.style.display='none';
+    }).catch(()=>{img.style.display='none';});
+  });
 }
 
 async function loadDetailPanel(cd,month){
@@ -2278,7 +2497,7 @@ async function loadDetailPanel(cd,month){
       ${dal?`<span class="status-badge ${nomClass(dal)}" style="margin-left:8px;font-size:12px;">${nomStatus(dal)}</span>`:''}
     </h5>
       ${dal?`<div style="font-size:13px;color:#888;margin-bottom:4px;">선물: ${giftText}</div>
-      ${dal.drawing?`<img src="${dal.drawing}" style="max-height:160px;border-radius:10px;border:2px solid #FFCA28;margin-bottom:6px;">`:''}
+      ${(dal.drawingRef||dal.drawing)?`<img ${dal.drawing?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:160px;border-radius:10px;border:2px solid #FFCA28;margin-bottom:6px;">`:''}
       <div class="view-text">${dal.message||''}</div>
       ${dal.status==='pending'?`<button class="action-btn btn-approve" style="margin-top:6px;" onclick="updateDalgona('${month+'_'+cd+'_dalgona'}','approved',this.closest('.stu-detail-inner').id)">✅ 승인</button><button class="action-btn btn-reject" style="margin-top:6px;" onclick="updateDalgona('${month+'_'+cd+'_dalgona'}','rejected',this.closest('.stu-detail-inner').id)">❌ 반려</button>`:''}`:'(없음)'}
     </div>
@@ -2288,6 +2507,7 @@ async function loadDetailPanel(cd,month){
       <button class="action-btn btn-reject" onclick="openRejectModal('${cd}','${month}','${(r.rejected_reason||'').replace(/'/g,"\\'")}')">🔙 반려하기</button>
       ${r.status==='rejected'?`<button class="action-btn btn-approve" onclick="approveRecord('${cd}','${month}')">✅ 재승인</button>`:''}
     </div>`:''}`;
+  hydrateDrawings(wrap);
 }
 
 async function updateNom(key,status,panelId){
@@ -2399,14 +2619,10 @@ async function deleteMonthData(){
   await Promise.all([
     saengRef.child('records/'+month).remove(),
   ]);
-  // nominations / dalgona는 month 필드로 필터링
-  const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').orderByChild('month').equalTo(month).once('value'),
-    saengRef.child('dalgona').orderByChild('month').equalTo(month).once('value'),
-  ]);
-  const delNom=[],delDal=[];
-  nomSnap.forEach(c=>delNom.push(saengRef.child('nominations/'+c.key).remove()));
-  dalSnap.forEach(c=>delDal.push(saengRef.child('dalgona/'+c.key).remove()));
+  // nominations / dalgona는 month 필드 또는 key prefix로 매칭 (누락 방지)
+  const {noms:nomList,dals:dalList}=await _fetchMonthNomsAndDals(month);
+  const delNom=nomList.map(n=>saengRef.child('nominations/'+n.key).remove());
+  const delDal=dalList.map(d=>saengRef.child('dalgona/'+d.key).remove());
   await Promise.all([...delNom,...delDal]);
   await removeMonthFromFirebase(month);
   populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
@@ -2512,7 +2728,7 @@ function toggleRankDetail(name,type){
   if(!items.length){el.innerHTML='<i style="color:#999;">상세 내용 없음</i>';return;}
   el.innerHTML=items.map(it=>{
     if(type==='dalgona'){
-      const giftText=it.gift==='cookie'?'🍪 간식(5쿠키)':it.gift==='마음'?`💖 ${it.gift_heart||''} 마음`:`✨ ${it.gift_etc||''}`;
+      const giftText=it.gift==='cookie'?'🍪 간식(5쿠키)':`❤️ 마음 : ${it.gift_heart||''}`;
       return `<div style="margin-bottom:8px;padding:8px;background:white;border-radius:8px;border:1px solid #FFD6E0;">
         <b>${it.from_name}</b>의 달고나 | 선물: ${giftText}<br>
         <span style="color:#555;">${it.message||''}</span>
@@ -2523,22 +2739,34 @@ function toggleRankDetail(name,type){
 }
 
 // ─── 배달하기 ───
+// 월별 nominations/dalgona 조회 (month 필드와 key prefix 둘 다 매칭 — 누락 방지)
+async function _fetchMonthNomsAndDals(month){
+  const [nomSnap,dalSnap]=await Promise.all([
+    saengRef.child('nominations').once('value'),
+    saengRef.child('dalgona').once('value')
+  ]);
+  const noms=[]; nomSnap.forEach(c=>{
+    const v=c.val()||{};
+    if(v.month===month||(c.key&&c.key.startsWith(month+'_'))) noms.push({key:c.key,...v});
+  });
+  const dals=[]; dalSnap.forEach(c=>{
+    const v=c.val()||{};
+    if(v.month===month||(c.key&&c.key.startsWith(month+'_'))) dals.push({key:c.key,...v});
+  });
+  return {noms,dals};
+}
 async function openDeliveryModal(){
   const month=document.getElementById('tMonthSel').value||currentMonth;
-  const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').orderByChild('month').equalTo(month).once('value'),
-    saengRef.child('dalgona').orderByChild('month').equalTo(month).once('value')
-  ]);
-  const noms=[]; nomSnap.forEach(c=>noms.push(c.val()));
-  const dals=[]; dalSnap.forEach(c=>dals.push(c.val()));
+  const {noms,dals}=await _fetchMonthNomsAndDals(month);
   const approved_noms=noms.filter(n=>n.status==='approved');
   const approved_dals=dals.filter(d=>d.status==='approved');
   const sent_noms=approved_noms.filter(n=>n.delivered);
   const pending_noms=approved_noms.filter(n=>!n.delivered);
   const sent_dals=approved_dals.filter(d=>d.delivered);
   const pending_dals=approved_dals.filter(d=>!d.delivered);
+  const nomKind=n=>n.type||(n.key&&n.key.includes('promising')?'promising':'defender');
   const lineNom=n=>{
-    const tp=n.type==='defender'?'🛡️ 방어자':'🌟 유망주';
+    const tp=nomKind(n)==='defender'?'🛡️ 방어자':'🌟 유망주';
     return `<div style="padding:6px 10px;font-size:13px;color:#555;border-bottom:1px solid #FFE4EC;">${tp} → <b>${n.to_name}</b></div>`;
   };
   const lineDal=d=>`<div style="padding:6px 10px;font-size:13px;color:#555;border-bottom:1px solid #FFE4EC;">🍬 달고나: <b>${d.from_name}</b> → <b>${d.to_name}</b></div>`;
@@ -2605,38 +2833,44 @@ window.deliverOneStudent=async function(cd,month){
 window.deliverApprovedToShop=async function(month){
   const ok=await prettyConfirm({title:'전체 발송',icon:'📦',body:`<b>${_monthsCache[month]||month}</b> 승인 항목을<br>모든 학생 가방으로 발송할까요?<br><span style="font-size:13px;color:#999;">이미 발송된 학생은 제외됩니다</span>`,okText:'발송하기'});
   if(!ok) return {nT:0,nD:0,reSent:false};
-  // 기록이 승인된 학생들의 pending 항목들 자동 승격
+  // 기록이 승인된 학생들의 nomination/dalgona record가 없으면 생성하고 pending 항목 승격
   const recSnap=await saengRef.child('records/'+month).once('value');
   const recs=recSnap.val()||{};
   for(const cd of Object.keys(recs)){
-    if(recs[cd]?.status==='approved') await autoApproveRelated(cd,month);
+    if(recs[cd]?.status==='approved'){
+      await ensureNominationsAndDalgonaForRecord(cd,month,recs[cd]);
+      await autoApproveRelated(cd,month);
+    }
   }
   return await _doDelivery({month,filterCd:null,allowReDeliver:false,silent:false});
 };
 
 async function _doDelivery({month,filterCd,allowReDeliver,silent}){
-  const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').orderByChild('month').equalTo(month).once('value'),
-    saengRef.child('dalgona').orderByChild('month').equalTo(month).once('value')
-  ]);
-  const noms=[]; nomSnap.forEach(c=>noms.push({key:c.key,...c.val()}));
-  const dals=[]; dalSnap.forEach(c=>dals.push({key:c.key,...c.val()}));
+  const {noms,dals}=await _fetchMonthNomsAndDals(month);
   const inScope=x=>!filterCd||String(x.from).trim()===String(filterCd).trim()||String(x.to).trim()===String(filterCd).trim();
   // 항목 발송은 'from' 학생 기준 (작성자가 보낸 것), 단 받는 사람도 포함되도록 둘 다 체크는 의미 없음 — 발송 단위는 작성자
   const inScopeNom=n=>!filterCd||String(n.from).trim()===String(filterCd).trim();
   const inScopeDal=d=>!filterCd||String(d.from).trim()===String(filterCd).trim();
-  let approved_noms=noms.filter(n=>inScopeNom(n)&&n.status==='approved'&&!n.delivered);
-  let approved_dals=dals.filter(d=>inScopeDal(d)&&d.status==='approved'&&!d.delivered);
-  if(!approved_noms.length&&!approved_dals.length){
-    const allApproved=noms.filter(n=>inScopeNom(n)&&n.status==='approved').length+dals.filter(d=>inScopeDal(d)&&d.status==='approved').length;
-    if(allApproved===0){if(!silent) alert('승인된 항목이 없습니다.');return {nT:0,nD:0,reSent:false};}
-    if(!allowReDeliver){
-      const ok=await prettyConfirm({title:'이미 발송됨',icon:'🔁',body:'이미 발송된 항목만 있습니다.<br>다시 발송할까요? <span style="font-size:13px;color:#999;">(중복 가능)</span>',okText:'다시 발송'});
-      if(!ok) return {nT:0,nD:0,reSent:false};
-    }
-    approved_noms=noms.filter(n=>inScopeNom(n)&&n.status==='approved');
-    approved_dals=dals.filter(d=>inScopeDal(d)&&d.status==='approved');
+  // 신규/이미 발송 분리
+  const noms_pending = noms.filter(n=>inScopeNom(n)&&n.status==='approved'&&!n.delivered);
+  const noms_done    = noms.filter(n=>inScopeNom(n)&&n.status==='approved'&&n.delivered);
+  const dals_pending = dals.filter(d=>inScopeDal(d)&&d.status==='approved'&&!d.delivered);
+  const dals_done    = dals.filter(d=>inScopeDal(d)&&d.status==='approved'&&d.delivered);
+  const totalApproved = noms_pending.length+noms_done.length+dals_pending.length+dals_done.length;
+  if(totalApproved===0){if(!silent) alert('승인된 항목이 없습니다.');return {nT:0,nD:0,reSent:false};}
+  // 이미 발송된 항목이 있으면 재발송 여부 확인
+  let includeDone = !!allowReDeliver;
+  const haveDone = noms_done.length+dals_done.length > 0;
+  const havePending = noms_pending.length+dals_pending.length > 0;
+  if(haveDone && !allowReDeliver && !silent){
+    const body = havePending
+      ? `미발송 ${noms_pending.length+dals_pending.length}건과 함께,<br>이미 발송된 <b>${noms_done.length+dals_done.length}건</b>도 다시 발송할까요?<br><span style="font-size:13px;color:#999;">(받은 학생에게 알림이 다시 떠요)</span>`
+      : `이미 발송된 항목만 있어요.<br><b>${noms_done.length+dals_done.length}건</b>을 다시 발송할까요?<br><span style="font-size:13px;color:#999;">(받은 학생에게 알림이 다시 떠요)</span>`;
+    includeDone = await prettyConfirm({title:'재발송',icon:'🔁',body,okText:'다시 발송',cancelText: havePending?'미발송만 보내기':'취소'});
+    if(!includeDone && !havePending){return {nT:0,nD:0,reSent:false};}
   }
+  let approved_noms = includeDone ? [...noms_pending, ...noms_done] : noms_pending;
+  let approved_dals = includeDone ? [...dals_pending, ...dals_done] : dals_pending;
   // shopRef 학생 데이터 가져오기 (cd→idx 매핑용)
   const stuSnap=await shopRef.child('stu').once('value');
   let stu=stuSnap.val()||[];
@@ -2652,14 +2886,34 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     dirtyInvs[idx]=inv;
     return inv;
   };
+  // db.itm에서 등록된 정의 조회 (교사가 수정한 이름·아이콘 사용)
+  const itmSnap=await shopRef.child('itm').once('value');
+  let itmList=itmSnap.val()||[];
+  if(!Array.isArray(itmList)) itmList=Object.values(itmList||{}).filter(Boolean);
+  const findItmBySpecial=(sp)=>itmList.find(it=>it&&it.special===sp);
+  const findItmByName=(nm)=>itmList.find(it=>it&&it.n===nm);
   const ensureSpecial=(invArr,kind)=>{
     let it=invArr.find(x=>x&&x.special===kind);
     if(!it){
-      const def=kind==='goldenTicket'
-        ?{n:'골든 티켓',i:'🎫',g:'L',st:'active',special:'goldenTicket',events:[],usedCount:0}
-        :{n:'달고나',i:'🍯',g:'L',st:'active',special:'dalgona',events:[],usedCount:0};
+      const reg=findItmBySpecial(kind);
+      const fallback=kind==='goldenTicket'
+        ?{n:'골든 티켓',i:'🎫',g:'L'}
+        :{n:'달고나',i:'🍯',g:'L'};
+      const def={
+        n:reg?.n||fallback.n,
+        i:reg?.i||fallback.i,
+        g:reg?.g||fallback.g,
+        st:'active',special:kind,events:[],usedCount:0
+      };
       invArr.push(def);
       it=invArr[invArr.length-1];
+    }
+    // 등록된 정의가 있으면 이름·아이콘 동기화 (교사가 변경한 경우 반영)
+    const reg=findItmBySpecial(kind);
+    if(reg){
+      if(reg.n) it.n=reg.n;
+      if(reg.i) it.i=reg.i;
+      if(reg.g) it.g=reg.g;
     }
     // events가 Firebase에서 object로 돌아오는 경우 array로 정규화
     if(!it.events) it.events=[];
@@ -2667,16 +2921,66 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     if(!it.usedCount) it.usedCount=0;
     return it;
   };
-  let nT=0,nD=0;
+  // 쿠키 부족 사전 검사 (달고나 간식만)
+  const senderCookieReq={};
+  console.log('[쿠키검사] approved_dals=', approved_dals.map(d=>({key:d.key,from:d.from,gift:d.gift,delivered:d.delivered})));
+  approved_dals.forEach(d=>{
+    if(d.gift!=='cookie') return;
+    const fIdx=findStu(d.from);
+    if(fIdx<0) { console.log('[쿠키검사] from 학생 못 찾음:', d.from); return; }
+    senderCookieReq[fIdx]=(senderCookieReq[fIdx]||0)+5;
+  });
+  console.log('[쿠키검사] senderCookieReq=', senderCookieReq);
+  const shortfalls=[];
+  Object.entries(senderCookieReq).forEach(([idx,req])=>{
+    const s=stu[idx]; if(!s) return;
+    const total=(s.cookie||0)-(s.usedCookie||0);
+    const avail=total-(s.shopUsed||0);
+    console.log('[쿠키검사]', s.nm, 'cookie=',s.cookie,'used=',s.usedCookie,'shop=',s.shopUsed,'avail=',avail,'req=',req);
+    if(avail<req) shortfalls.push({nm:s.nm,no:s.no,avail:Math.max(0,avail),req,short:req-avail});
+  });
+  console.log('[쿠키검사] shortfalls=', shortfalls);
+  if(shortfalls.length && !silent){
+    const list=shortfalls.map(s=>`<li>${s.no?s.no+'번 ':''}<b>${s.nm}</b> — 보유 ${s.avail}🍪 / 필요 ${s.req}🍪 <span style="color:#E53935;">(${s.short}개 부족)</span></li>`).join('');
+    const ok=await prettyConfirm({title:'쿠키 부족 ⚠️',icon:'🍪',body:`다음 학생들은 달고나 간식 발송에 쿠키가 모자라요:<br><ul style="text-align:left;font-size:13px;line-height:1.7;margin:10px 0;padding-left:22px;">${list}</ul>그래도 발송할까요?<br><span style="font-size:12px;color:#999;">(부족분은 학생 보유 쿠키 한도로만 차감됩니다)</span>`,okText:'그래도 발송',cancelText:'취소'});
+    if(!ok) return {nT:0,nD:0,reSent:false};
+  }
+  let nT=0,nD=0,nT_def=0,nT_pro=0;
+  // 디버그: 어떤 유형의 nomination이 처리/스킵됐는지 추적
+  const _nomDebug={total:approved_noms.length,toMissing:0,already:0,pushedDef:0,pushedPro:0};
+  // 발송 받은 학생(records 작성자) 기록 — 확인 컬럼 판정용
+  const recipientCds=new Set();
   for(const n of approved_noms){
     const idx=findStu(n.to);
-    if(idx<0) continue;
+    if(idx<0) { _nomDebug.toMissing++; console.warn('[deliver] 받는 학생 못 찾음:', n.key, '→ to=', n.to); continue; }
     const inv=await getInv(idx);
     const it=ensureSpecial(inv,'goldenTicket');
-    it.events.push({ts:Date.now(),fromCd:'',fromName:'익명',reason:n.reason||'',subtype:n.type||(n.key&&n.key.includes('promising')?'promising':'defender')});
+    const subtype=n.type||(n.key&&n.key.includes('promising')?'promising':'defender');
+    // 중복 방지: nomKey 매칭 OR (구버전 데이터: nomKey 없지만 같은 to+subtype의 이벤트가 이미 있으면 스킵)
+    const evList = it.events||[];
+    const byKey = evList.some(ev=>ev&&ev.nomKey===n.key);
+    // 구버전: nomKey 없는 이벤트가 있고, n.delivered=true면 이미 발송된 것으로 간주
+    const legacyDelivered = !byKey && n.delivered && evList.some(ev=>ev&&!ev.nomKey&&ev.subtype===subtype);
+    if(byKey||legacyDelivered){
+      _nomDebug.already++;
+      // 재발송: 기존 event ts 갱신 → 학생 알림 다시 뜸
+      const matched = byKey ? evList.find(ev=>ev&&ev.nomKey===n.key) : evList.find(ev=>ev&&!ev.nomKey&&ev.subtype===subtype);
+      if(matched) matched.ts = Date.now();
+      await saengRef.child('nominations/'+n.key).update({delivered:true,delivered_at:Date.now()});
+      if(n.from) recipientCds.add(String(n.from).trim());
+      // 재발송 카운트 (사용자가 재발송 선택한 경우 표시용)
+      nT++;
+      if(subtype==='defender') nT_def++; else nT_pro++;
+      continue;
+    }
+    it.events.push({ts:Date.now(),nomKey:n.key,fromCd:'',fromName:'익명',reason:n.reason||'',subtype});
     await saengRef.child('nominations/'+n.key).update({delivered:true,delivered_at:Date.now()});
+    if(n.from) recipientCds.add(String(n.from).trim());
     nT++;
+    if(subtype==='defender'){nT_def++;_nomDebug.pushedDef++;}
+    else {nT_pro++;_nomDebug.pushedPro++;}
   }
+  console.log('[deliver] nominations 처리 결과:', _nomDebug, 'approved_noms types=', approved_noms.map(n=>n.type||(n.key&&n.key.split('_').pop())));
   // 보낸 학생들의 shopUsed 누적
   const senderShopUsedAdd={};
   for(const d of approved_dals){
@@ -2685,22 +2989,48 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     const inv=await getInv(idx);
     const it=ensureSpecial(inv,'dalgona');
     const ts=Date.now();
-    let drawingId='';
-    if(d.drawing){
-      drawingId=ts+'_'+(d.from||'x')+'_'+(d.to||'y');
-      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(d.drawing);
+    // 재발송 dedup: 같은 dalKey가 events에 있으면 ts만 갱신 (인벤 중복 방지 + 학생 알림 다시 뜸)
+    const evList = it.events||[];
+    const existingDal = evList.find(ev=>ev&&ev.dalKey===d.key);
+    if(existingDal){
+      existingDal.ts = ts;
+      await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
+      if(d.from) recipientCds.add(String(d.from).trim());
+      nD++;
+      continue;
     }
-    it.events.push({ts,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId});
+    let drawingId='';
+    // 우선순위: drawingRef(student_{cd}_{month}) → drawing(레거시 base64)
+    let drawingData=null;
+    if(d.drawingRef){
+      const refSnap=await firebase.database().ref('ClassData/EventShop/drawings/'+d.drawingRef).once('value');
+      drawingData=refSnap.val();
+    }
+    if(!drawingData && d.drawing) drawingData=d.drawing;
+    if(drawingData){
+      drawingId=ts+'_'+(d.from||'x')+'_'+(d.to||'y');
+      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(drawingData);
+    }
+    it.events.push({ts,dalKey:d.key,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId});
     // 간식: 보낸 학생 -5쿠키 + 받은 학생 가방에 왕의 수라상 +1 (자동)
     if(d.gift==='cookie'){
       const fromIdx=findStu(d.from);
       if(fromIdx>=0){
         senderShopUsedAdd[fromIdx]=(senderShopUsedAdd[fromIdx]||0)+5;
       }
-      inv.push({n:'왕의 수라상',i:'🍱',st:'active',g:'C'});
+      const surangReg=findItmByName('왕의 수라상');
+      inv.push({n:surangReg?.n||'왕의 수라상',i:surangReg?.i||'🍱',st:'active',g:surangReg?.g||'C'});
     }
     await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
+    if(d.from) recipientCds.add(String(d.from).trim());
     nD++;
+  }
+  // 작성 학생들의 records에 record_delivered_at 기록 + student_viewed_at 초기화 (확인 판정 기준)
+  const deliveryTs=Date.now();
+  console.log('[deliver] recipientCds(작성자) =', [...recipientCds]);
+  for(const cd of recipientCds){
+    await saengRef.child('records/'+month+'/'+cd).update({record_delivered_at:deliveryTs, student_viewed_at:0});
+    console.log('[deliver] record_delivered_at 갱신:', month+'/'+cd);
   }
   // 학생별 inv 저장
   for(const [idx,inv] of Object.entries(dirtyInvs)){
@@ -2712,7 +3042,27 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     const cur=snap.val()||0;
     await shopRef.child('stu/'+fromIdx+'/shopUsed').set(cur+addAmt);
   }
-  if(!silent) toast(`📦 발송 완료 · 골든티켓 ${nT} · 달고나 ${nD}`);
+  if(!silent) {
+    document.getElementById('_deliverResultModal')?.remove();
+    const dbg = `전체 approved: <b>${_nomDebug.total}</b> · 수신자 못찾음: <b>${_nomDebug.toMissing}</b> · 이미 발송: <b>${_nomDebug.already}</b> · push 방어자 <b>${_nomDebug.pushedDef}</b> 유망주 <b>${_nomDebug.pushedPro}</b>`;
+    document.body.insertAdjacentHTML('beforeend', `
+    <div id="_deliverResultModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:'Jua',sans-serif;">
+      <div style="background:white;border-radius:18px;padding:24px 26px;max-width:440px;width:90%;box-shadow:0 12px 36px rgba(0,0,0,0.35);">
+        <div style="text-align:center;font-size:48px;margin-bottom:8px;">📦</div>
+        <h3 style="margin:0 0 12px;text-align:center;color:#5D4037;">발송 완료</h3>
+        <div style="background:#FFF8E1;border-radius:12px;padding:12px 14px;font-size:14px;color:#5D4037;line-height:1.7;margin-bottom:10px;">
+          🎫 골든티켓 <b>${nT}</b>건 (방어자 ${nT_def}, 유망주 ${nT_pro})<br>
+          🍯 달고나 <b>${nD}</b>건
+          ${_nomDebug.already>0?`<br><span style="color:#888;font-size:12px;">ℹ️ 그중 ${_nomDebug.already}건은 재발송 (학생 가방 중복 없이 알림만 다시 발송)</span>`:''}
+        </div>
+        <details style="margin-bottom:14px;font-size:11px;color:#888;">
+          <summary style="cursor:pointer;">자세한 nomination 처리 결과</summary>
+          <div style="background:#FAFAFA;border-radius:10px;padding:10px;margin-top:6px;line-height:1.8;">${dbg}</div>
+        </details>
+        <button onclick="document.getElementById('_deliverResultModal').remove()" style="width:100%;padding:11px;border:none;border-radius:12px;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-family:'Jua';font-size:15px;cursor:pointer;box-shadow:0 3px 0 #D94F75;">확인</button>
+      </div>
+    </div>`);
+  }
   return {nT,nD,reSent:true};
 }
 
