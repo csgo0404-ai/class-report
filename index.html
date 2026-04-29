@@ -282,6 +282,9 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 #rejectionNoticeModal .rn-ok:active{transform:translateY(2px);box-shadow:0 2px 0 #BF360C;}
 @keyframes popIn{from{transform:scale(.88);opacity:0;}to{transform:scale(1);opacity:1;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+.canvas-wrap.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#FFF8E7;padding:16px;display:flex;flex-direction:column;}
+.canvas-wrap.fullscreen canvas{flex:1;width:100% !important;height:auto !important;max-height:calc(100vh - 120px);object-fit:contain;border:2px solid #FFD6E0;border-radius:12px;}
+.tool-btn.active{background:linear-gradient(135deg,#FFCA28,#F9A825) !important;color:white !important;box-shadow:0 0 0 3px #FFE082;}
 .refresh-btn{transition:transform .2s;cursor:pointer;border:none;color:white;}
 .refresh-btn:hover{transform:rotate(180deg) scale(1.08);}
 .refresh-btn:active{animation:spin .5s linear;}
@@ -402,7 +405,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <h3>✉️ 선생님께</h3>
       <textarea class="form-textarea" id="teacherMsg" placeholder="선생님께 하고 싶은 말을 써주세요." rows="5" oninput="countChars(this);autoSave()"></textarea>
       <div class="char-counter" id="cc_teacherMsg">0 / 500</div>
-      <div style="font-size:18px;color:#aaa;margin-top:6px;text-align:right;">제일 성실하게 쓴 3명에게는 쿠키가 부여됩니다 🍪</div>
+      <div style="font-size:18px;color:#aaa;margin-top:6px;text-align:right;">선생님 에너지 충전 완료! 최고의 비타민이 되어준 세 명에게 간식 쿠폰을 쏩니다! 🍪</div>
     </div>
 
     <!-- D 방어자/유망주 -->
@@ -467,10 +470,13 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <div class="color-dot" style="background:#0066FF" onclick="setColor('#0066FF',this)"></div>
               <div class="color-dot" style="background:#E040FB" onclick="setColor('#E040FB',this)"></div>
               <div class="color-dot" style="background:white;border:2px solid #ccc" onclick="setColor('white',this)"></div>
+              <button class="tool-btn active" id="pencilBtn" onclick="selectPencil()" title="연필">✏️</button>
+              <button class="tool-btn" id="fillBtn" onclick="toggleFill()" title="페인트 (막힌 공간 채우기)">🪣</button>
               <button class="tool-btn" id="eraserBtn" onclick="toggleEraser()">지우개</button>
               <button class="tool-btn canvas-undo-btn" id="undoBtn" onclick="undoCanvas()" title="실행 취소 (Ctrl+Z)">↩</button>
               <button class="tool-btn canvas-redo-btn" id="redoBtn" onclick="redoCanvas()" title="다시 실행 (Ctrl+Y)">↪</button>
               <button class="tool-btn canvas-clear-btn" onclick="clearCanvas()">🗑</button>
+              <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">⛶</button>
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:#888;">굵기:
               <input type="range" id="brushSize" min="2" max="20" value="5" style="flex:1;" oninput="updateCursorSize()">
@@ -546,12 +552,10 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 
   <!-- 탭: 랭킹 -->
   <div id="tab-ranking" class="t-content hidden">
-    <div class="month-picker">
+    <div class="month-picker" style="display:flex;align-items:center;gap:10px;">
       <label>조회 월:</label>
-      <div style="display:flex;gap:10px;align-items:center;">
-  <select id="tMonthSel5" onchange="loadRanking()"></select>
-
-</div>
+      <select id="tMonthSel5" onchange="loadRanking()"></select>
+      <button class="pink-btn" onclick="openTeacherMsgModal()" style="margin-left:auto;">✉️ 선생님께 한마디</button>
     </div>
     <div id="rankingWrap">로딩 중...</div>
   </div>
@@ -620,6 +624,15 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <div class="limit-row"><span class="limit-label">달고나 메시지</span><input class="limit-input" id="lim_dalgonaMsg" type="number" min="0" max="500" value="10"></div>
       <button class="add-stu-btn" onclick="saveLimits()" style="margin-top:8px;">💾 저장</button>
     </div>
+  </div>
+</div>
+
+<!-- 선생님께 모음 모달 -->
+<div id="teacherMsgModal" class="modal-overlay hidden">
+  <div class="modal-box" style="max-width:720px;">
+    <button class="modal-close" onclick="document.getElementById('teacherMsgModal').classList.add('hidden')">✕</button>
+    <h3>✉️ 선생님께 한마디 모음</h3>
+    <div id="teacherMsgContent" style="max-height:65vh;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -1816,10 +1829,12 @@ function makeEraserCursor(size){
   const half=Math.round(s/2);
   return `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='${s}' height='${s}' viewBox='0 0 ${s} ${s}'%3E%3Crect x='2' y='2' width='${s-4}' height='${s-4}' rx='3' fill='white' stroke='%23999' stroke-width='2'/%3E%3C/svg%3E") ${half} ${half}, cell`;
 }
+const FILL_CURSOR=`url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><text x='0' y='26' font-size='26'>🖌️</text></svg>") 4 28, crosshair`;
 function updateCursorSize(){
   if(!canvas) return;
   const sz=parseInt(document.getElementById('brushSize')?.value||5);
-  canvas.style.cursor=erasing?makeEraserCursor(sz):makePencilCursor(sz);
+  if(_filling) canvas.style.cursor=FILL_CURSOR;
+  else canvas.style.cursor=erasing?makeEraserCursor(sz):makePencilCursor(sz);
 }
 const PENCIL_CURSOR=makePencilCursor(5);
 const ERASER_CURSOR=makeEraserCursor(5);
@@ -1840,8 +1855,25 @@ function initCanvas(){
   };
   const getBrush=()=>Math.max(1,parseInt(document.getElementById('brushSize').value)||5);
   const start=e=>{
-    e.preventDefault();drawing=true;_canvasUserDirty=true;
+    e.preventDefault();
     const p=getPos(e);
+    if(_filling){
+      floodFill(p.x,p.y,erasing?'#ffffff':brushColor);
+      // 페인트 후 자동 저장 트리거
+      autoSave();
+      if(me){
+        const data=getCanvasData();
+        try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
+        clearTimeout(window._drawingSyncTimer);
+        window._drawingSyncTimer=setTimeout(async()=>{
+          const drawingId='student_'+me.cd+'_'+currentMonth;
+          await syncDrawing(drawingId,data);
+          saengRef.child('records/'+currentMonth+'/'+me.cd+'/dalgona_drawing_id').set(drawingId).catch(()=>{});
+        },3000);
+      }
+      return;
+    }
+    drawing=true;_canvasUserDirty=true;
     ctx.beginPath();ctx.moveTo(p.x,p.y);
     ctx.strokeStyle=erasing?'white':brushColor;
     ctx.lineWidth=erasing?getBrush()*3:getBrush();
@@ -1896,10 +1928,106 @@ function setColor(c,el){
 }
 function toggleEraser(){
   erasing=!erasing;
+  if(erasing){_filling=false;document.getElementById('fillBtn')?.classList.remove('active');document.getElementById('pencilBtn')?.classList.remove('active');}
+  else{document.getElementById('pencilBtn')?.classList.add('active');}
   document.getElementById('eraserBtn').classList.toggle('active',erasing);
   updateCursorSize();
 }
-function clearCanvas(){ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);saveCanvasState();}
+function clearCanvas(){
+  ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+  saveCanvasState();
+  // 사용자 의도적 삭제 — 원격 그림 reload 방지 + Cloudinary 캐시 키 무효화
+  _canvasUserDirty=true;
+  if(me){
+    try{ localStorage.removeItem('sw_canvas_'+me.cd+'_'+currentMonth); }catch(e){}
+    const drawingId='student_'+me.cd+'_'+currentMonth;
+    firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).remove().catch(()=>{});
+    saengRef.child('records/'+currentMonth+'/'+me.cd+'/dalgona_drawing_id').remove().catch(()=>{});
+  }
+}
+let _filling=false;
+function selectPencil(){
+  _filling=false;erasing=false;
+  document.getElementById('pencilBtn')?.classList.add('active');
+  document.getElementById('fillBtn')?.classList.remove('active');
+  document.getElementById('eraserBtn')?.classList.remove('active');
+  updateCursorSize();
+}
+function toggleFill(){
+  _filling=!_filling;erasing=false;
+  document.getElementById('fillBtn').classList.toggle('active',_filling);
+  document.getElementById('eraserBtn').classList.remove('active');
+  document.getElementById('pencilBtn')?.classList.toggle('active',!_filling);
+  updateCursorSize();
+}
+function toggleCanvasFullscreen(){
+  const wrap=canvas?.closest('.canvas-wrap');
+  if(!wrap) return;
+  wrap.classList.toggle('fullscreen');
+  const fb=document.getElementById('fullscreenBtn');
+  if(fb) fb.textContent=wrap.classList.contains('fullscreen')?'🗕':'⛶';
+}
+function floodFill(sx,sy,fillHex){
+  if(!ctx) return;
+  sx=Math.floor(sx);sy=Math.floor(sy);
+  if(sx<0||sy<0||sx>=canvas.width||sy>=canvas.height) return;
+  const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+  const d=img.data, w=canvas.width, h=canvas.height;
+  const idx=(x,y)=>(y*w+x)*4;
+  const sIdx=idx(sx,sy);
+  const sr=d[sIdx],sg=d[sIdx+1],sb=d[sIdx+2];
+  // hex → rgb
+  const m=fillHex.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+  let fr,fg,fb_;
+  if(m){fr=parseInt(m[1],16);fg=parseInt(m[2],16);fb_=parseInt(m[3],16);}
+  else{const c=document.createElement('canvas').getContext('2d');c.fillStyle=fillHex;const v=c.fillStyle.match(/^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);fr=parseInt(v[1],16);fg=parseInt(v[2],16);fb_=parseInt(v[3],16);}
+  if(Math.abs(sr-fr)+Math.abs(sg-fg)+Math.abs(sb-fb_)<8) return; // 같은 색
+  // 시작 색과의 유클리드 거리로 비교 (회색 안티앨리어싱 포함)
+  const startBright=(sr+sg+sb)/3;
+  // 시작 색이 밝은 영역(흰색 ~ 매우 밝은 회색)이면 tolerance 크게 — 연필 선의 안티앨리어싱 가장자리까지 모두 흡수
+  const tol=startBright>200?160:90;
+  const filled=new Uint8Array(w*h);
+  const stack=[[sx,sy]];
+  while(stack.length){
+    const [x,y]=stack.pop();
+    if(x<0||y<0||x>=w||y>=h) continue;
+    const flag=y*w+x;
+    if(filled[flag]) continue;
+    const i=idx(x,y);
+    const dr=d[i]-sr, dg=d[i+1]-sg, db=d[i+2]-sb;
+    if(dr*dr+dg*dg+db*db>tol*tol*3) continue;
+    d[i]=fr;d[i+1]=fg;d[i+2]=fb_;d[i+3]=255;
+    filled[flag]=1;
+    stack.push([x+1,y]);stack.push([x-1,y]);stack.push([x,y+1]);stack.push([x,y-1]);
+  }
+  // Dilation 3회: 매번 채운 영역 경계의 "연필색이 아닌(=라인 본체가 아닌) 픽셀"을 채움색으로 덮음
+  // → 안티앨리어싱 그라데이션 띠가 두꺼워도 모두 흡수
+  const lineDark=v=>v<70; // 연필 선 본체로 추정 (건드리지 않음)
+  for(let pass=0;pass<3;pass++){
+    const newFilled=[];
+    for(let y=0;y<h;y++){
+      for(let x=0;x<w;x++){
+        const f=y*w+x;
+        if(filled[f]) continue;
+        const adj=(x>0&&filled[f-1])||(x<w-1&&filled[f+1])||(y>0&&filled[f-w])||(y<h-1&&filled[f+w]);
+        if(!adj) continue;
+        const i=f*4;
+        const r=d[i],g=d[i+1],b=d[i+2];
+        // 연필 선 본체(어두운 픽셀)는 보존
+        if(lineDark(r)&&lineDark(g)&&lineDark(b)) continue;
+        // 이미 채움색과 거의 같으면 skip
+        if(Math.abs(r-fr)+Math.abs(g-fg)+Math.abs(b-fb_)<10){filled[f]=1;continue;}
+        d[i]=fr;d[i+1]=fg;d[i+2]=fb_;d[i+3]=255;
+        newFilled.push(f);
+      }
+    }
+    if(!newFilled.length) break;
+    newFilled.forEach(f=>filled[f]=1);
+  }
+  ctx.putImageData(img,0,0);
+  saveCanvasState();
+  _canvasUserDirty=true;
+}
 function getCanvasData(){
   if(!canvas) return '';
   if(isCanvasBlank()) return '';
@@ -2783,6 +2911,75 @@ async function _fetchMonthNomsAndDals(month){
   });
   return {noms,dals};
 }
+async function openTeacherMsgModal(){
+  const month=document.getElementById('tMonthSel5')?.value||document.getElementById('tMonthSel')?.value||currentMonth;
+  const snap=await saengRef.child('records/'+month).once('value');
+  const records=snap.val()||{};
+  const students=(shopData&&shopData.stu)||[];
+  const items=[];
+  students.filter(s=>s.nm).forEach(s=>{
+    const r=records[s.cd]||records[String(s.cd)];
+    const msg=r&&r.teacher_msg?String(r.teacher_msg).trim():'';
+    if(msg) items.push({cd:s.cd,name:s.nm,msg,status:r.status||'draft',time:r.submitted_at});
+  });
+  const wrap=document.getElementById('teacherMsgContent');
+  if(!items.length){
+    wrap.innerHTML='<div style="color:#999;text-align:center;padding:30px;">아직 작성된 메시지가 없어요</div>';
+  }else{
+    const badge={draft:'임시저장',submitted:'제출완료',approved:'승인완료',rejected:'반려됨'};
+    const cards=items.map(it=>{
+      const t=it.time?new Date(it.time).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      return `<div class="delivery-item" style="border-color:#D1C4E9;background:#F3E5F5;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" class="msgPickChk" data-cd="${it.cd}" data-name="${it.name}" style="width:18px;height:18px;cursor:pointer;">
+            <b style="color:#4527A0;font-size:16px;">💌 ${it.name}</b>
+          </label>
+          <span style="font-size:12px;color:#888;">${badge[it.status]||it.status} · ${t}</span>
+        </div>
+        <div style="white-space:pre-wrap;line-height:1.6;color:#333;">${it.msg.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>
+      </div>`;
+    }).join('');
+    const sendBar=`<div style="position:sticky;bottom:0;background:rgba(255,255,255,.95);padding:10px 0;margin-top:10px;border-top:2px dashed #D1C4E9;text-align:center;">
+      <span style="font-size:13px;color:#666;margin-right:10px;">3명을 선택하면 간식 쿠폰이 발송됩니다 🍪</span>
+      <button onclick="sendSnackCoupons()" style="padding:10px 22px;border:none;border-radius:14px;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-family:'Jua';font-size:15px;cursor:pointer;box-shadow:0 4px 0 #D94F75;">📦 발송</button>
+    </div>`;
+    wrap.innerHTML=cards+sendBar;
+  }
+  document.getElementById('teacherMsgModal').classList.remove('hidden');
+}
+async function sendSnackCoupons(){
+  const checked=Array.from(document.querySelectorAll('.msgPickChk:checked'));
+  if(checked.length!==3){ alert('정확히 3명을 선택해주세요. (현재 '+checked.length+'명)'); return; }
+  const picks=checked.map(c=>({cd:c.dataset.cd,name:c.dataset.name}));
+  if(!confirm('아래 3명에게 간식 쿠폰을 발송할까요?\n\n'+picks.map(p=>'· '+p.name).join('\n'))) return;
+  try{
+    const shopRoot=firebase.database().ref('ClassData/EventShop');
+    const [stuSnap,itmSnap]=await Promise.all([
+      shopRoot.child('stu').once('value'),
+      shopRoot.child('itm').once('value')
+    ]);
+    const stu=stuSnap.val()||[];
+    const itmRaw=itmSnap.val()||[];
+    const itm=Array.isArray(itmRaw)?itmRaw:Object.values(itmRaw);
+    const surang=itm.find(it=>it&&it.n==='왕의 수라상')||{n:'왕의 수라상',i:'🍱',g:'C'};
+    let ok=0, fail=[];
+    for(const p of picks){
+      const idx=stu.findIndex(s=>s&&String(s.cd)===String(p.cd));
+      if(idx<0){ fail.push(p.name); continue; }
+      const s=stu[idx];
+      if(!Array.isArray(s.inv)) s.inv=[];
+      s.inv.push({n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C'});
+      await shopRoot.child('stu/'+idx+'/inv').set(s.inv);
+      ok++;
+    }
+    alert('✅ '+ok+'명에게 간식 쿠폰을 발송했습니다.'+(fail.length?'\n❌ 실패: '+fail.join(', '):''));
+    document.getElementById('teacherMsgModal').classList.add('hidden');
+  }catch(e){
+    console.error(e);
+    alert('발송 실패: '+e.message);
+  }
+}
 async function openDeliveryModal(){
   const month=document.getElementById('tMonthSel').value||currentMonth;
   const {noms,dals}=await _fetchMonthNomsAndDals(month);
@@ -3037,7 +3234,11 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     if(!drawingData && d.drawing) drawingData=d.drawing;
     if(drawingData){
       drawingId=ts+'_'+(d.from||'x')+'_'+(d.to||'y');
-      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(drawingData);
+      // 레거시 base64면 Cloudinary 업로드 후 URL만 Firebase에 저장
+      if(typeof drawingData==='string'&&drawingData.startsWith('data:')){
+        try{ drawingData=await uploadToCloudinary(drawingData); }catch(e){ drawingData=''; }
+      }
+      if(drawingData) await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(drawingData);
     }
     it.events.push({ts,dalKey:d.key,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId});
     // 간식: 보낸 학생 -5쿠키 + 받은 학생 가방에 왕의 수라상 +1 (자동)
