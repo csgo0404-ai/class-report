@@ -2941,7 +2941,7 @@ async function openTeacherMsgModal(){
       </div>`;
     }).join('');
     const sendBar=`<div style="position:sticky;bottom:0;background:rgba(255,255,255,.95);padding:10px 0;margin-top:10px;border-top:2px dashed #D1C4E9;text-align:center;">
-      <span style="font-size:13px;color:#666;margin-right:10px;">3명을 선택하면 간식 쿠폰이 발송됩니다 🍪</span>
+      <span style="font-size:13px;color:#666;margin-right:10px;">선택한 학생들에게 간식 쿠폰이 발송됩니다 🍪</span>
       <button onclick="sendSnackCoupons()" style="padding:10px 22px;border:none;border-radius:14px;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-family:'Jua';font-size:15px;cursor:pointer;box-shadow:0 4px 0 #D94F75;">📦 발송</button>
     </div>`;
     wrap.innerHTML=cards+sendBar;
@@ -2950,9 +2950,9 @@ async function openTeacherMsgModal(){
 }
 async function sendSnackCoupons(){
   const checked=Array.from(document.querySelectorAll('.msgPickChk:checked'));
-  if(checked.length!==3){ alert('정확히 3명을 선택해주세요. (현재 '+checked.length+'명)'); return; }
+  if(checked.length<1){ alert('1명 이상 선택해주세요.'); return; }
   const picks=checked.map(c=>({cd:c.dataset.cd,name:c.dataset.name}));
-  if(!confirm('아래 3명에게 간식 쿠폰을 발송할까요?\n\n'+picks.map(p=>'· '+p.name).join('\n'))) return;
+  if(!confirm('아래 '+picks.length+'명에게 간식 쿠폰을 발송할까요?\n\n'+picks.map(p=>'· '+p.name).join('\n'))) return;
   try{
     const shopRoot=firebase.database().ref('ClassData/EventShop');
     const [stuSnap,itmSnap]=await Promise.all([
