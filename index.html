@@ -1722,28 +1722,56 @@ async function submitRecord(){
     if(el&&!el.value.trim()){markError(el);errors.push(label+' 칸이 비어있어요');if(!firstEl)firstEl=el;}
   });
 
-  // 최소 글자 수 미달 (charLimits = 최소 글자 수). countChars 표시와 동일한 길이(value.length) 사용
+  // 방어자·유망주 선택 필수
+  const defSelEl=document.getElementById('defenderSelect');
+  const proSelEl=document.getElementById('promisingSelect');
+  if(!defSel){markError(defSelEl);errors.push('🛡️ 방어자 친구를 선택해주세요');if(!firstEl)firstEl=defSelEl;}
+  if(!proSel){markError(proSelEl);errors.push('🌟 유망주 친구를 선택해주세요');if(!firstEl)firstEl=proSelEl;}
+
+  // 능력 태그 선택 필수 (부족/가득)
+  if(lackSelected.size===0){
+    const tagBox=document.querySelector('[data-tag-type="lack"]')||document.getElementById('lackTags');
+    if(tagBox) markError(tagBox);
+    errors.push('🔻 부족했던 능력을 1개 이상 선택해주세요');
+    if(!firstEl) firstEl=tagBox||document.getElementById('lackReason');
+  }
+  if(fullSelected.size===0){
+    const tagBox=document.querySelector('[data-tag-type="full"]')||document.getElementById('fullTags');
+    if(tagBox) markError(tagBox);
+    errors.push('🔺 가득했던 능력을 1개 이상 선택해주세요');
+    if(!firstEl) firstEl=tagBox||document.getElementById('fullReason');
+  }
+
+  // 선택-이유 불일치 (이유 비어있음)
+  const defReason=document.getElementById('defenderReason');
+  const proReason=document.getElementById('promisingReason');
+  const dalTo=document.getElementById('dalgonaTo');
+  const dalMsgEl=document.getElementById('dalgonaMsg');
+  if(defSel&&!defReason.value.trim()){markError(defReason);errors.push('방어자 이유를 입력해주세요');if(!firstEl)firstEl=defReason;}
+  if(proSel&&!proReason.value.trim()){markError(proReason);errors.push('유망주 이유를 입력해주세요');if(!firstEl)firstEl=proReason;}
+  if(!dalSel&&dalMsgEl.value.trim()){markError(dalTo);errors.push('달고나 받는 친구를 선택해주세요');if(!firstEl)firstEl=dalTo;}
+  if(dalSel&&!dalMsgEl.value.trim()){markError(dalMsgEl);errors.push('달고나 메시지를 입력해주세요');if(!firstEl)firstEl=dalMsgEl;}
+
+  // 최소 글자 수 미달 (trim 기준 — 공백만 채우는 것 방지)
+  // dalgonaMsg는 dalSel 있을 때만, defenderReason/promisingReason은 해당 선택이 있을 때만 검사
+  const conditionalSkip=id=>{
+    if(id==='dalgonaMsg') return !dalSel;
+    if(id==='defenderReason') return !defSel;
+    if(id==='promisingReason') return !proSel;
+    return false;
+  };
   for(const[id,min] of Object.entries(charLimits)){
     if(!min) continue;
+    if(conditionalSkip(id)) continue;
     const ta=document.getElementById(id);
     if(!ta) continue;
-    const len=ta.value.length;
-    if(ta.value.trim().length>0 && len<min){
+    const len=ta.value.trim().length;
+    if(len>0 && len<min){
       markError(ta);
       errors.push(`⚠️ ${fieldLabel[id]||id} 내용이 너무 짧아요 (최소 ${min}자, 현재 ${len}자)`);
       if(!firstEl)firstEl=ta;
     }
   }
-
-  // 선택-이유 불일치
-  const defReason=document.getElementById('defenderReason');
-  const proReason=document.getElementById('promisingReason');
-  const dalTo=document.getElementById('dalgonaTo');
-  if(defSel&&!defReason.value.trim()){markError(defReason);errors.push('방어자 이유를 입력해주세요');if(!firstEl)firstEl=defReason;}
-  if(proSel&&!proReason.value.trim()){markError(proReason);errors.push('유망주 이유를 입력해주세요');if(!firstEl)firstEl=proReason;}
-  if(!defSel&&defReason.value.trim()){const el=document.getElementById('defenderSelect');markError(el);errors.push('방어자 친구를 선택해주세요');if(!firstEl)firstEl=el;}
-  if(!proSel&&proReason.value.trim()){const el=document.getElementById('promisingSelect');markError(el);errors.push('유망주 친구를 선택해주세요');if(!firstEl)firstEl=el;}
-  if(!dalSel&&document.getElementById('dalgonaMsg').value.trim()){markError(dalTo);errors.push('달고나 받는 친구를 선택해주세요');if(!firstEl)firstEl=dalTo;}
   if(dalSel&&isCanvasBlank()){
     const cv=document.getElementById('dalgonaCanvas');
     if(cv){cv.style.outline='3px solid #FF1744';const clr=()=>{cv.style.outline='';};setTimeout(clr,4000);}
@@ -2818,13 +2846,27 @@ async function importBackup(event){
   event.target.value='';
 }
 async function clearAllData(){
-  if(!confirm('⚠️ 모든 생활기록부 데이터를 삭제합니다.\n학생 명단과 설정은 유지됩니다.\n정말 진행할까요?')) return;
-  await Promise.all([
-    saengRef.child('records').remove(),
-    saengRef.child('nominations').remove(),
-    saengRef.child('dalgona').remove(),
-  ]);
-  toast('💣 전체 초기화 완료');
+  if(!confirm('⚠️ 모든 생활기록부 데이터를 완전히 삭제합니다.\n\n• 모든 월 기록, 추천(방어자/유망주), 달고나, 알림\n• Firebase 그림 참조 + Cloudinary 그림 정보\n\n학생 명단·설정·학생 가방 아이템은 유지됩니다.\n정말 진행할까요?')) return;
+  if(!confirm('정말 마지막 확인입니다.\n되돌릴 수 없습니다. 계속할까요?')) return;
+  try{
+    await Promise.all([
+      saengRef.child('records').remove(),
+      saengRef.child('nominations').remove(),
+      saengRef.child('dalgona').remove(),
+      saengRef.child('months').remove(),
+      saengRef.child('month_status').remove(),
+      saengRef.child('months_order').remove(),
+      saengRef.child('months_hidden').remove(),
+      saengRef.child('notifications').remove(),
+      firebase.database().ref('ClassData/EventShop/drawings').remove(),
+    ]);
+    _monthsCache={};_monthsOrder={};_monthStatus={};
+    populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
+    toast('💣 전체 초기화 완료');
+  }catch(e){
+    console.error(e);
+    alert('초기화 실패: '+e.message);
+  }
 }
 
 // ─── 랭킹 ───
@@ -2854,20 +2896,35 @@ async function loadRanking(){
     if(!name) return;
     dalCount[name]=(dalCount[name]||0)+1;
   });
-  const toRank=obj=>Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const toRank=obj=>Object.entries(obj).sort((a,b)=>b[1]-a[1]);
   const rankEmoji=['🥇','🥈','🥉','4️⃣','5️⃣'];
-  const renderRank=(list,type)=>list.length?list.map(([name,cnt],i)=>`
-    <div class="rank-item">
-      <div class="rank-no">${rankEmoji[i]}</div>
-      <div class="rank-name" onclick="toggleRankDetail('${name}','${type}')">${name}</div>
-      <div class="rank-count">${cnt}표</div>
-    </div>
-    <div class="rank-detail hidden" id="rankdetail_${type}_${name.replace(/\s/g,'_')}"></div>
-  `).join(''):'<div style="color:#999;padding:16px;">아직 없어요</div>';
+  const renderRank=(list,type)=>{
+    if(!list.length) return '<div style="color:#999;padding:16px;">아직 없어요</div>';
+    const html=list.map(([name,cnt],i)=>{
+      const hide=i>=5?' rank-extra hidden':'';
+      const badge=i<5?rankEmoji[i]:`${i+1}`;
+      return `<div class="rank-item${hide}" data-type="${type}">
+        <div class="rank-no">${badge}</div>
+        <div class="rank-name" onclick="toggleRankDetail('${name}','${type}')">${name}</div>
+        <div class="rank-count">${cnt}표</div>
+      </div>
+      <div class="rank-detail hidden${hide}" data-type="${type}" id="rankdetail_${type}_${name.replace(/\s/g,'_')}"></div>`;
+    }).join('');
+    const moreBtn=list.length>5?`<button class="rank-more-btn" data-type="${type}" onclick="toggleRankMore('${type}',this)" style="margin:8px auto 0;display:block;padding:6px 18px;border:none;border-radius:20px;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-family:'Jua';font-size:14px;cursor:pointer;box-shadow:0 3px 0 #D94F75;">➕ 전체 보기 (${list.length-5}명 더)</button>`:'';
+    return html+moreBtn;
+  };
   document.getElementById('rankingWrap').innerHTML=`
     <div class="ranking-section"><h3>🛡️ 방어자 랭킹</h3>${renderRank(toRank(defCount),'defender')}</div>
     <div class="ranking-section"><h3>🌟 유망주 랭킹</h3>${renderRank(toRank(proCount),'promising')}</div>
     <div class="ranking-section"><h3>🍬 달고나 랭킹</h3>${renderRank(toRank(dalCount),'dalgona')}</div>`;
+}
+function toggleRankMore(type,btn){
+  const items=document.querySelectorAll(`.rank-item.rank-extra[data-type="${type}"]`);
+  const expanded=btn.dataset.expanded==='1';
+  items.forEach(el=>el.classList.toggle('hidden',expanded));
+  btn.dataset.expanded=expanded?'0':'1';
+  const cnt=items.length;
+  btn.innerHTML=expanded?`➕ 전체 보기 (${cnt}명 더)`:`➖ 접기`;
 }
 
 function toggleRankDetail(name,type){
@@ -2959,22 +3016,47 @@ async function sendSnackCoupons(){
       shopRoot.child('stu').once('value'),
       shopRoot.child('itm').once('value')
     ]);
-    const stu=stuSnap.val()||[];
+    const stuRaw=stuSnap.val()||{};
+    // Firebase array/object 모두 지원 — 원본 키(idx) 보존
+    const stuEntries=Array.isArray(stuRaw)
+      ? stuRaw.map((s,i)=>[String(i),s])
+      : Object.entries(stuRaw);
     const itmRaw=itmSnap.val()||[];
     const itm=Array.isArray(itmRaw)?itmRaw:Object.values(itmRaw);
     const surang=itm.find(it=>it&&it.n==='왕의 수라상')||{n:'왕의 수라상',i:'🍱',g:'C'};
     let ok=0, fail=[];
     for(const p of picks){
-      const idx=stu.findIndex(s=>s&&String(s.cd)===String(p.cd));
-      if(idx<0){ fail.push(p.name); continue; }
-      const s=stu[idx];
-      if(!Array.isArray(s.inv)) s.inv=[];
-      s.inv.push({n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C'});
-      await shopRoot.child('stu/'+idx+'/inv').set(s.inv);
-      ok++;
+      const found=stuEntries.find(([k,s])=>s&&String(s.cd||'').trim()===String(p.cd||'').trim());
+      if(!found){ fail.push(p.name); continue; }
+      const [key,s]=found;
+      let inv=Array.isArray(s.inv)?s.inv.slice():(s.inv?Object.values(s.inv).filter(Boolean):[]);
+      inv.push({n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C',fromTeacherMsg:true,ts:Date.now()});
+      try{
+        await shopRoot.child('stu/'+key+'/inv').set(inv);
+        ok++;
+        const chk=document.querySelector(`.msgPickChk[data-cd="${p.cd}"]`);
+        if(chk){
+          chk.checked=true;
+          chk.disabled=true;
+          const card=chk.closest('.delivery-item');
+          if(card){
+            card.style.background='#E8F5E9';
+            card.style.borderColor='#A5D6A7';
+            if(!card.querySelector('.sent-badge')){
+              const badge=document.createElement('span');
+              badge.className='sent-badge';
+              badge.textContent=' ✅ 발송됨';
+              badge.style.cssText='color:#2E7D32;font-size:12px;font-weight:bold;margin-left:6px;';
+              chk.parentElement.appendChild(badge);
+            }
+          }
+        }
+      }catch(e){
+        console.error('inv 저장 실패',p.name,e);
+        fail.push(p.name+'('+e.message+')');
+      }
     }
     alert('✅ '+ok+'명에게 간식 쿠폰을 발송했습니다.'+(fail.length?'\n❌ 실패: '+fail.join(', '):''));
-    document.getElementById('teacherMsgModal').classList.add('hidden');
   }catch(e){
     console.error(e);
     alert('발송 실패: '+e.message);
