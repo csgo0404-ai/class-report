@@ -2384,12 +2384,26 @@ async function addMonthToSelector(){
 }
 
 // ─── 전체현황 (실시간 리스너 — 변경분만 push) ───
+// 학생별 records 캐시 (child_* 리스너로 증분 갱신)
+let _overviewRecCache={};
+let _overviewRenderTimer=null;
+function _scheduleOverviewRender(){
+  clearTimeout(_overviewRenderTimer);
+  _overviewRenderTimer=setTimeout(()=>{
+    if(_overviewMonth) renderOverview(_overviewRecCache,_overviewMonth);
+  },80);
+}
 function detachOverviewListener(){
-  if(_overviewListener&&_overviewMonth){
-    saengRef.child('records/'+_overviewMonth).off('value',_overviewListener);
-    _overviewListener=null;
+  if(_overviewListener && _overviewListener.ref){
+    const {ref,onAdd,onCh,onRm}=_overviewListener;
+    ref.off('child_added',onAdd);
+    ref.off('child_changed',onCh);
+    ref.off('child_removed',onRm);
   }
+  _overviewListener=null;
   _overviewMonth=null;
+  _overviewRecCache={};
+  clearTimeout(_overviewRenderTimer);
 }
 function loadOverview(forceToast){
   const month=document.getElementById('tMonthSel')?.value;
@@ -2404,16 +2418,35 @@ function loadOverview(forceToast){
   }
   detachOverviewListener();
   _overviewMonth=month;
-  _overviewListener=saengRef.child('records/'+month).on('value',snap=>{
-    renderOverview(snap.val()||{},month);
+  _overviewRecCache={};
+  const ref=saengRef.child('records/'+month);
+  // child_* 리스너: 변경된 학생 1명만 다운로드 (이전: on('value')로 전체 학생 records)
+  const onAdd=ref.on('child_added',s=>{
+    if(_overviewMonth!==month) return;
+    _overviewRecCache[s.key]=s.val();
+    _scheduleOverviewRender();
   });
+  const onCh=ref.on('child_changed',s=>{
+    if(_overviewMonth!==month) return;
+    _overviewRecCache[s.key]=s.val();
+    _scheduleOverviewRender();
+  });
+  const onRm=ref.on('child_removed',s=>{
+    if(_overviewMonth!==month) return;
+    delete _overviewRecCache[s.key];
+    _scheduleOverviewRender();
+  });
+  _overviewListener={ref,onAdd,onCh,onRm};
+  // 빈 월 대비: 일정 시간 후에도 데이터 없으면 빈 상태 표시
+  setTimeout(()=>{ if(_overviewMonth===month && Object.keys(_overviewRecCache).length===0) renderOverview({},month); },200);
   if(forceToast===true) toast('🔄 새로고침');
 }
 window._overviewSort={col:'no',dir:1};
 window.sortOverview=function(col){
   if(window._overviewSort.col===col) window._overviewSort.dir*=-1;
   else { window._overviewSort.col=col; window._overviewSort.dir=1; }
-  loadOverview();
+  // 캐시된 데이터로 즉시 재렌더 (재구독 X)
+  if(_overviewMonth) renderOverview(_overviewRecCache,_overviewMonth);
 };
 function renderOverview(records,month){
   const students=(shopData&&shopData.stu)||[];
@@ -2625,20 +2658,19 @@ function hydrateDrawings(root){
 
 async function loadDetailPanel(cd,month){
   const wrap=document.getElementById('detail_'+cd);
-  const snap=await saengRef.child('records/'+month+'/'+cd).once('value');
-  const r=snap.val();
-  const stuName=getStudentName(cd);
-  if(!r){wrap.innerHTML='<div style="color:#999;padding:10px;">아직 작성된 기록이 없습니다.</div>';return;}
-  // 방어자/유망주/달고나 조회
-  const [nomSnap,dalSnap]=await Promise.all([
+  // 4개 fetch를 1번 Promise.all로 통합 (이전: 직렬 + 중복 fetch)
+  const [recSnap,defSnap,proSnap,dalSnap]=await Promise.all([
+    saengRef.child('records/'+month+'/'+cd).once('value'),
     saengRef.child('nominations/'+month+'_'+cd+'_defender').once('value'),
     saengRef.child('nominations/'+month+'_'+cd+'_promising').once('value'),
-    // dalgona
+    saengRef.child('dalgona/'+month+'_'+cd+'_dalgona').once('value')
   ]);
-  const dalSnap2=await saengRef.child('dalgona/'+month+'_'+cd+'_dalgona').once('value');
-  const defNom=nomSnap.val();
-  const proNom=(await saengRef.child('nominations/'+month+'_'+cd+'_promising').once('value')).val();
-  const dal=dalSnap2.val();
+  const r=recSnap.val();
+  const stuName=getStudentName(cd);
+  if(!r){wrap.innerHTML='<div style="color:#999;padding:10px;">아직 작성된 기록이 없습니다.</div>';return;}
+  const defNom=defSnap.val();
+  const proNom=proSnap.val();
+  const dal=dalSnap.val();
 
   const statusBadge={draft:'임시저장',submitted:'제출완료',rejected:'반려됨'}[r.status]||r.status;
   const nomStatus=(n)=>n?({pending:'대기중',approved:'승인됨',rejected:'반려됨'}[n.status]||n.status):'없음';
@@ -2954,17 +2986,18 @@ function toggleRankDetail(name,type){
 // ─── 배달하기 ───
 // 월별 nominations/dalgona 조회 (month 필드와 key prefix 둘 다 매칭 — 누락 방지)
 async function _fetchMonthNomsAndDals(month){
+  // 키 prefix({month}_)로 해당 월만 쿼리 → 트래픽 대폭 감소
   const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').once('value'),
-    saengRef.child('dalgona').once('value')
+    saengRef.child('nominations').orderByKey().startAt(month+'_').endAt(month+'_').once('value'),
+    saengRef.child('dalgona').orderByKey().startAt(month+'_').endAt(month+'_').once('value')
   ]);
   const noms=[]; nomSnap.forEach(c=>{
     const v=c.val()||{};
-    if(v.month===month||(c.key&&c.key.startsWith(month+'_'))) noms.push({key:c.key,...v});
+    noms.push({key:c.key,...v});
   });
   const dals=[]; dalSnap.forEach(c=>{
     const v=c.val()||{};
-    if(v.month===month||(c.key&&c.key.startsWith(month+'_'))) dals.push({key:c.key,...v});
+    dals.push({key:c.key,...v});
   });
   return {noms,dals};
 }
@@ -3389,8 +3422,9 @@ function toast(msg){
 // ═══ 초기화 ═══
 window.addEventListener('load',()=>{
   initCanvas();
-  shopRef.once('value',snap=>{
-    shopData=snap.val()||{};
+  // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
+  shopRef.child('stu').once('value',snap=>{
+    shopData={stu: snap.val()||[]};
     // URL param ?stu=CODE 자동 로그인
     const urlParams=new URLSearchParams(window.location.search);
     const urlStu=urlParams.get('stu');
