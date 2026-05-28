@@ -282,8 +282,15 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 #rejectionNoticeModal .rn-ok:active{transform:translateY(2px);box-shadow:0 2px 0 #BF360C;}
 @keyframes popIn{from{transform:scale(.88);opacity:0;}to{transform:scale(1);opacity:1;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
-.canvas-wrap.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#FFF8E7;padding:16px;display:flex;flex-direction:column;}
-.canvas-wrap.fullscreen canvas{flex:1;width:100% !important;height:auto !important;max-height:calc(100vh - 120px);object-fit:contain;border:2px solid #FFD6E0;border-radius:12px;}
+.canvas-wrap.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#FFF8E7;padding:16px;display:grid;grid-template-columns:1fr auto auto 1fr;grid-template-rows:auto 1fr;grid-template-areas:'. brush tools .' 'canvas canvas canvas canvas';gap:10px 24px;align-items:center;}
+.canvas-wrap.fullscreen .brush-size-row{grid-area:brush;align-self:center;width:auto !important;}
+.canvas-wrap.fullscreen .canvas-tools{grid-area:tools;align-self:center;}
+.canvas-wrap.fullscreen canvas{grid-area:canvas;justify-self:center;}
+/* 캔버스 고유 비율(520:390) 유지 — object-fit 사용 X (좌표 어긋남 방지) */
+.canvas-wrap.fullscreen canvas{flex:0 1 auto !important;width:auto !important;height:auto !important;max-width:min(100%, calc((100vh - 220px) * 520 / 390)) !important;max-height:calc(100vh - 220px) !important;aspect-ratio:520/390;border:2px solid #FFD6E0;border-radius:12px;}
+/* 풀스크린 툴바·굵기바: 비율 그대로 크기 증가 (zoom으로 일괄 확대) */
+.canvas-wrap.fullscreen .canvas-tools{zoom:1.8;margin-bottom:14px;}
+.canvas-wrap.fullscreen .brush-size-row{zoom:1.8;margin-bottom:10px;font-size:14px !important;}
 .tool-btn.active{background:linear-gradient(135deg,#FFCA28,#F9A825) !important;color:white !important;box-shadow:0 0 0 3px #FFE082;}
 .refresh-btn{transition:transform .2s;cursor:pointer;border:none;color:white;}
 .refresh-btn:hover{transform:rotate(180deg) scale(1.08);}
@@ -471,17 +478,17 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <div class="color-dot" style="background:#E040FB" onclick="setColor('#E040FB',this)"></div>
               <div class="color-dot" style="background:white;border:2px solid #ccc" onclick="setColor('white',this)"></div>
               <button class="tool-btn active" id="pencilBtn" onclick="selectPencil()" title="연필">✏️</button>
-              <button class="tool-btn" id="fillBtn" onclick="toggleFill()" title="페인트 (막힌 공간 채우기)">🎨</button>
+              <button class="tool-btn" id="fillBtn" onclick="toggleFill()" title="페인트 (막힌 공간 채우기)">🖌️</button>
               <button class="tool-btn" id="eraserBtn" onclick="toggleEraser()">지우개</button>
               <button class="tool-btn canvas-undo-btn" id="undoBtn" onclick="undoCanvas()" title="실행 취소 (Ctrl+Z)">↩</button>
               <button class="tool-btn canvas-redo-btn" id="redoBtn" onclick="redoCanvas()" title="다시 실행 (Ctrl+Y)">↪</button>
               <button class="tool-btn canvas-clear-btn" onclick="clearCanvas()">🗑</button>
               <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">⛶</button>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:#888;">굵기:
+            <div class="brush-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:#888;">굵기:
               <input type="range" id="brushSize" min="2" max="20" value="5" style="flex:1;" oninput="updateCursorSize()">
             </div>
-            <canvas id="dalgonaCanvas" width="520" height="390" style="width:100%;height:auto;display:block;background:white;"></canvas>
+            <canvas id="dalgonaCanvas" width="2080" height="1560" style="width:100%;height:auto;display:block;background:white;"></canvas>
           </div>
         </div>
       </div>
@@ -728,25 +735,67 @@ const firebaseConfig={apiKey:"AIzaSyCzsI9FW3bga1V73lCR7pNgfPLdcqcbsgM",authDomai
 // Cloudinary (그림 호스팅) — unsigned upload preset 사용, 토큰 노출 없음
 const CLOUDINARY_CLOUD='dtzknm7gz';
 const CLOUDINARY_PRESET='csgo0404';
-async function uploadToCloudinary(dataUrl){
+// Cloudflare Worker 프록시 (Cloudinary 서명 destroy 위임) — 동화책 제작.html과 공용
+const API_URL='https://donghwa-api.csgo0404.workers.dev';
+async function _cloudinaryDestroy(publicId){
+  if(!publicId) return false;
+  try{
+    const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'cloudinaryDestroy',publicId})});
+    const j=await r.json().catch(()=>({}));
+    console.log('[destroy] Worker 응답', j);
+    return !!(j&&(j.ok||j.result==='ok'));
+  }catch(e){ console.warn('[destroy] 실패(무시)', e); return false; }
+}
+function _sanitizePublicId(id){ return String(id).replace(/[^A-Za-z0-9_\-]/g,'_').slice(0,120); }
+async function uploadToCloudinary(dataUrl, publicId, opts){
   if(!dataUrl) return '';
   const fd=new FormData();
   fd.append('file',dataUrl);
-  fd.append('upload_preset',CLOUDINARY_PRESET);
-  const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:'POST',body:fd});
-  if(!r.ok) throw new Error('Cloudinary 업로드 실패: '+r.status);
+  if(publicId){
+    // 서명된 업로드 → 같은 public_id 덮어쓰기 가능
+    const sanitized=_sanitizePublicId(publicId);
+    const signRes=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'signUpload',publicId:sanitized})});
+    const sign=await signRes.json().catch(()=>({}));
+    if(!sign||!sign.ok) throw new Error('서명 실패: '+(sign&&sign.error||''));
+    fd.append('public_id',sign.publicId);
+    fd.append('overwrite','true');
+    fd.append('invalidate','true');
+    fd.append('timestamp',String(sign.timestamp));
+    fd.append('signature',sign.signature);
+    fd.append('api_key',sign.apiKey);
+    // upload_preset 없이 서명 업로드
+  } else {
+    fd.append('upload_preset',CLOUDINARY_PRESET);
+  }
+  const fetchOpts={method:'POST',body:fd};
+  if(opts&&opts.keepalive) fetchOpts.keepalive=true;
+  const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,fetchOpts);
+  console.log('[upload] HTTP', r.status, 'public_id=', publicId);
+  if(!r.ok){
+    let body=''; try{ body=await r.text(); }catch(e){}
+    console.error('[upload] Cloudinary 실패 응답', r.status, body);
+    throw new Error('Cloudinary 업로드 실패: '+r.status);
+  }
   const j=await r.json();
-  return j.secure_url||'';
+  console.log('[upload] Cloudinary 응답 JSON', {public_id:j.public_id, version:j.version, secure_url:j.secure_url});
+  return {url:j.secure_url||'', version:j.version};
 }
+// 그림 업로드: 서명된 업로드로 같은 public_id에 덮어쓰기 = 1파일 유지
 async function syncDrawing(drawingId,dataUrl){
-  if(!dataUrl) return '';
+  if(!dataUrl) { console.warn('[sync] dataUrl 비어있음'); return ''; }
   try{
-    const url=await uploadToCloudinary(dataUrl);
-    if(url){
-      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(url);
-      return url;
+    const stableId=_sanitizePublicId('saeng_'+drawingId);
+    console.log('[sync] 업로드 시작 (덮어쓰기)', {stableId, dataLen:dataUrl.length});
+    const res=await uploadToCloudinary(dataUrl, stableId);
+    console.log('[sync] 업로드 응답', res);
+    if(res.url){
+      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(res.url);
+      console.log('[sync] Firebase drawings 노드 갱신 완료', {drawingId, url:res.url});
+      return res.url;
+    } else {
+      console.error('[sync] Cloudinary가 빈 URL 반환');
     }
-  }catch(e){console.warn('drawing upload failed',e);}
+  }catch(e){ console.error('[sync] drawing upload 실패',e); }
   return '';
 }
 if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -1142,6 +1191,10 @@ function populateMonthSelectors(months,selectors){
       sel.appendChild(opt);
     });
     if(prev&&entries.some(([v])=>v===prev)) sel.value=prev;
+    else if(id==='tMonthSel' && entries.length){
+      // 학생별 제출 현황: 항상 최신 달이 기본 선택
+      sel.value=entries[entries.length-1][0];
+    }
   });
 }
 async function saveMonthToFirebase(val,label){
@@ -1154,9 +1207,68 @@ async function saveMonthToFirebase(val,label){
   }
 }
 async function removeMonthFromFirebase(val){
+  // 메타 + 해당 월에 속한 모든 학생 데이터 (records, nominations, dalgona, drawings) 제거
   await saengRef.child('months/'+val).remove();
   await saengRef.child('month_status/'+val).remove();
   await saengRef.child('months_order/'+val).remove();
+  await saengRef.child('months_hidden/'+val).remove();
+  await saengRef.child('records/'+val).remove();
+  // nominations/dalgona: key가 "{month}_{cd}_..." 또는 데이터에 month 필드를 가짐
+  try{
+    const nomSnap=await saengRef.child('nominations').once('value');
+    const nomVal=nomSnap.val()||{};
+    const nomDeletes=[];
+    for(const [k,v] of Object.entries(nomVal)){
+      if(k.startsWith(val+'_') || (v&&v.month===val)) nomDeletes.push(saengRef.child('nominations/'+k).remove());
+    }
+    await Promise.all(nomDeletes);
+  }catch(e){}
+  try{
+    const dalSnap=await saengRef.child('dalgona').once('value');
+    const dalVal=dalSnap.val()||{};
+    const dalDeletes=[];
+    for(const [k,v] of Object.entries(dalVal)){
+      if(k.startsWith(val+'_') || (v&&v.month===val)) dalDeletes.push(saengRef.child('dalgona/'+k).remove());
+    }
+    await Promise.all(dalDeletes);
+  }catch(e){}
+  // 학생 그림 노드 (ClassData/EventShop/drawings/student_{cd}_{month})
+  try{
+    const drSnap=await firebase.database().ref('ClassData/EventShop/drawings').once('value');
+    const drVal=drSnap.val()||{};
+    const drDeletes=[];
+    for(const k of Object.keys(drVal)){
+      if(k.endsWith('_'+val)) drDeletes.push(firebase.database().ref('ClassData/EventShop/drawings/'+k).remove());
+    }
+    await Promise.all(drDeletes);
+  }catch(e){}
+  // 학생 가방(inv) — 해당 월에 발송된 events 제거 (nomKey/dalKey가 "{month}_..."로 시작)
+  try{
+    const stuSnap=await shopRef.child('stu').once('value');
+    const stuRaw=stuSnap.val()||{};
+    const entries=Array.isArray(stuRaw)
+      ? stuRaw.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
+      : Object.entries(stuRaw);
+    for(const [key,stu] of entries){
+      if(!stu||!Array.isArray(stu.inv)) continue;
+      let changed=false;
+      const newInv=stu.inv.map(it=>{
+        if(!it||!Array.isArray(it.events)) return it;
+        const filtered=it.events.filter(ev=>{
+          const k=ev&&(ev.nomKey||ev.dalKey)||'';
+          return !(k&&k.startsWith(val+'_'));
+        });
+        if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
+        return it;
+      // 이벤트가 모두 사라진 special 아이템(events 배열만 의미 있는 것)도 정리
+      }).filter(it=>{
+        // dalgona/goldenTicket처럼 events-only 아이템은 events 비면 제거
+        if(it&&Array.isArray(it.events)&&it.events.length===0&&(it.n==='달고나'||it.n==='골든티켓'||it.n==='goldenTicket'||it.n==='dalgona')) {changed=true;return false;}
+        return true;
+      });
+      if(changed) await shopRef.child('stu/'+key+'/inv').set(newInv);
+    }
+  }catch(e){console.warn('학생 가방 정리 실패',e);}
   delete _monthsCache[val];
   delete _monthsOrder[val];
 }
@@ -1424,7 +1536,7 @@ function autoSave(){
   if(isSubmittedUI) delete draft.status;
   // dalgona_drawing은 더 이상 records에 저장 안 함 (drawings 노드 분리)
   delete draft.dalgona_drawing;
-  try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify(draft));}catch(e){}
+  try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...draft,updated_at:Date.now()}));}catch(e){}
   clearTimeout(autoSaveTimer);
   autoSaveTimer=setTimeout(()=>{
     saengRef.child('records/'+currentMonth+'/'+me.cd).update({...draft,updated_at:Date.now()}).catch(()=>{});
@@ -1475,7 +1587,7 @@ function resetForm(){
   document.getElementById('submittedBanner').classList.add('hidden');
   document.getElementById('rejectedBanner').classList.add('hidden');
   const sb=document.getElementById('submitBtn');const db=document.getElementById('saveDraftBtn');
-  if(sb)sb.disabled=false;if(db)db.disabled=false;
+  if(sb){sb.disabled=false;sb.textContent='📮 제출하기';}if(db)db.disabled=false;
   formLocked=false;setFormLocked(false);
 }
 function detachMyRecordListener(){
@@ -1520,11 +1632,67 @@ function listenMyRecord(){
   });
   
   _myRecordRef=saengRef.child('records/'+currentMonth+'/'+me.cd);
+  const lsKey='sw_lastRecord_'+me.cd+'_'+currentMonth;
+  const draftKey='sw_draft_'+me.cd+'_'+currentMonth;
+  const canvasKey='sw_canvas_'+me.cd+'_'+currentMonth;
+  // 월 생성 시각을 먼저 확인하여 stale draft 폐기 판정
+  let monthOpenedAt=0;
+  const monthOpenedPromise=saengRef.child('month_status/'+currentMonth).once('value').then(s=>{
+    monthOpenedAt=Number(s.val()?.opened_at)||0;
+    try{
+      const draftRaw=localStorage.getItem(draftKey);
+      if(draftRaw){
+        const draft=JSON.parse(draftRaw);
+        const dTs=Number(draft&&draft.updated_at)||0;
+        if(monthOpenedAt && dTs && monthOpenedAt>dTs){
+          localStorage.removeItem(draftKey);
+          localStorage.removeItem(canvasKey);
+          localStorage.removeItem(lsKey);
+        } else if(draft&&draft.month===currentMonth){
+          // stale 아닐 때만 즉시 복원
+          fillForm(draft);
+        }
+      }
+    }catch(e){}
+  });
   _myRecordListener=_myRecordRef.on('value',snap=>{
     const d=snap.val();
-    if(!d){try{localStorage.removeItem(lsKey);}catch(e){}resetForm();return;}
+    if(!d){
+      try{localStorage.removeItem(lsKey);}catch(e){}
+      // remote가 비어 있어도 로컬 draft가 있으면 그것으로 복원 (새로고침 시 입력 보존)
+      // 단, 월이 재생성된 경우(monthOpenedAt > draft.updated_at)는 draft도 폐기
+      try{
+        const draftRaw=localStorage.getItem(draftKey);
+        if(draftRaw){
+          const draft=JSON.parse(draftRaw);
+          const dTs=Number(draft&&draft.updated_at)||0;
+          if(monthOpenedAt && dTs && monthOpenedAt>dTs){
+            localStorage.removeItem(draftKey);
+            localStorage.removeItem(canvasKey);
+          } else if(draft&&draft.month===currentMonth){
+            fillForm(draft); return;
+          }
+        }
+      }catch(e){}
+      resetForm();return;
+    }
     try{localStorage.setItem(lsKey,JSON.stringify(d));}catch(e){}
-    fillForm(d);
+    // 로컬 draft가 remote보다 최신이면 draft 우선 (debounce 중에 새로고침된 경우 입력 보존)
+    let useData=d;
+    try{
+      const draftRaw=localStorage.getItem(draftKey);
+      if(draftRaw){
+        const draft=JSON.parse(draftRaw);
+        const dTs=Number(draft&&draft.updated_at)||0;
+        const rTs=Number(d.updated_at)||0;
+        // 승인/제출 상태가 remote에서 바뀐 경우는 remote 우선
+        const remoteLocked=(d.status==='approved'||d.status==='submitted'||d.status==='rejected');
+        if(!remoteLocked && draft && draft.month===currentMonth && dTs>rTs){
+          useData={...d, ...draft};
+        }
+      }
+    }catch(e){}
+    fillForm(useData);
     // 학생 확인은 이벤트 상점의 [확인] 버튼 클릭으로만 갱신됨 (자동 X)
   });
 }
@@ -1562,6 +1730,14 @@ function fillForm(data){
     document.getElementById('saveDraftBtn').disabled=isApproved||isSubmitted;
     setFormLocked(isApproved);
   }
+  // 제출 버튼 라벨 상태별 갱신
+  const _submitBtn=document.getElementById('submitBtn');
+  if(_submitBtn){
+    if(isApproved) _submitBtn.textContent='✅ 승인됨';
+    else if(isSubmitted) _submitBtn.textContent='✅ 제출됨';
+    else if(isRejected) _submitBtn.textContent='↻ 다시 제출';
+    else _submitBtn.textContent='📮 제출하기';
+  }
   setGemsFromData('lack',data.lack_names||[]);
   setGemsFromData('full',data.full_names||[]);
   const m={lackReason:'lack_reason',fullReason:'full_reason',growthPlan:'growth_plan',mySecret:'my_secret',teacherMsg:'teacher_msg',defenderReason:'defender_reason',promisingReason:'promising_reason',dalgonaMsg:'dalgona_msg'};
@@ -1583,23 +1759,30 @@ function fillForm(data){
         _canvasUserDirty=false;
       }
     };
+    // 복원 우선순위: localStorage(최신 입력) > Firebase remote > 레거시
+    // 이유: localStorage는 매 획마다 갱신되지만 remote는 3초 debounce로 지연 또는 CDN 캐시로 옛 URL을 가리킬 수 있음
+    let restoredFromLocal=false;
+    try{
+      const local=localStorage.getItem('sw_canvas_'+me.cd+'_'+currentMonth);
+      if(local){ restoreNow(local); restoredFromLocal=true; }
+    }catch(e){}
     firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).once('value').then(snap=>{
       const remote=snap.val();
-      if(remote){ restoreNow(remote); return; }
+      if(remote){
+        if(!restoredFromLocal) restoreNow(remote);
+        return;
+      }
       // 레거시 records.dalgona_drawing → Cloudinary 마이그레이션
       if(data.dalgona_drawing){
         syncDrawing(drawingId,data.dalgona_drawing).catch(()=>{});
         saengRef.child('records/'+currentMonth+'/'+me.cd).update({dalgona_drawing:null,dalgona_drawing_id:drawingId}).catch(()=>{});
-        restoreNow(data.dalgona_drawing);
+        if(!restoredFromLocal) restoreNow(data.dalgona_drawing);
         return;
       }
-      // localStorage fallback → Cloudinary 업로드
+      // remote 없으면 로컬 본을 Cloudinary로 업로드해서 동기화
       try{
         const local=localStorage.getItem('sw_canvas_'+me.cd+'_'+currentMonth);
-        if(local){
-          syncDrawing(drawingId,local).catch(()=>{});
-          restoreNow(local);
-        }
+        if(local) syncDrawing(drawingId,local).catch(()=>{});
       }catch(e){}
     }).catch(()=>{});
   }
@@ -1650,11 +1833,18 @@ async function saveRecord(status='draft'){
   if(status==='submitted') data.submitted_at=Date.now();
   // dalgona_drawing은 records에 저장 안 함 (drawings 노드 분리)
   delete data.dalgona_drawing;
-  // 제출 시 그림이 있다면 drawings 노드에 즉시 동기화
-  if(status==='submitted'&&!isCanvasBlank()){
+  // 임시저장·제출 모두 그림 동기화 (학생 화면과 교사 화면이 어긋나지 않도록)
+  const _blank=isCanvasBlank();
+  console.log('[saveRecord] status=', status, 'isCanvasBlank=', _blank);
+  if(!_blank){
     const drawingId='student_'+me.cd+'_'+currentMonth;
-    await syncDrawing(drawingId,getCanvasData());
+    const _cd=getCanvasData();
+    console.log('[saveRecord] syncDrawing 호출', {drawingId, dataLen:_cd?_cd.length:0});
+    const _url=await syncDrawing(drawingId,_cd);
+    console.log('[saveRecord] syncDrawing 반환', {drawingId, url:_url});
     data.dalgona_drawing_id=drawingId;
+  } else {
+    console.warn('[saveRecord] 캔버스가 비어 있다고 판단됨 → 업로드 스킵');
   }
   await saengRef.child('records/'+currentMonth+'/'+me.cd).update({...data,updated_at:Date.now()});
   localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...data,updated_at:Date.now()}));
@@ -1891,13 +2081,8 @@ function initCanvas(){
       autoSave();
       if(me){
         const data=getCanvasData();
+        // 편집 중에는 localStorage에만 저장 (Cloudinary 업로드는 제출 시에 1회)
         try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
-        clearTimeout(window._drawingSyncTimer);
-        window._drawingSyncTimer=setTimeout(async()=>{
-          const drawingId='student_'+me.cd+'_'+currentMonth;
-          await syncDrawing(drawingId,data);
-          saengRef.child('records/'+currentMonth+'/'+me.cd+'/dalgona_drawing_id').set(drawingId).catch(()=>{});
-        },3000);
       }
       return;
     }
@@ -1920,13 +2105,8 @@ function initCanvas(){
       // 그림 백업: localStorage(base64) + Cloudinary 업로드 후 URL을 Firebase에 저장 (debounce 3초)
       if(me){
         const data=getCanvasData();
+        // 편집 중에는 localStorage에만 저장 (Cloudinary 업로드는 제출 시에 1회)
         try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
-        clearTimeout(window._drawingSyncTimer);
-        window._drawingSyncTimer=setTimeout(async()=>{
-          const drawingId='student_'+me.cd+'_'+currentMonth;
-          await syncDrawing(drawingId,data);
-          saengRef.child('records/'+currentMonth+'/'+me.cd+'/dalgona_drawing_id').set(drawingId).catch(()=>{});
-        },3000);
       }
     }
   };
@@ -2370,6 +2550,48 @@ async function addMonthToSelector(){
   const label=(inp?.value||'').trim();
   if(!label) return alert('제목을 입력해주세요');
   const val=label.replace(/[.#$/\[\]]/g,'_');
+  // 같은 이름으로 재생성 시 이전 잔여 데이터(records/nominations/dalgona/drawings) 정리
+  try{
+    await saengRef.child('records/'+val).remove();
+    const nomSnap=await saengRef.child('nominations').once('value');
+    const nomVal=nomSnap.val()||{};
+    for(const [k,v] of Object.entries(nomVal)){
+      if(k.startsWith(val+'_')||(v&&v.month===val)) await saengRef.child('nominations/'+k).remove();
+    }
+    const dalSnap=await saengRef.child('dalgona').once('value');
+    const dalVal=dalSnap.val()||{};
+    for(const [k,v] of Object.entries(dalVal)){
+      if(k.startsWith(val+'_')||(v&&v.month===val)) await saengRef.child('dalgona/'+k).remove();
+    }
+    const drSnap=await firebase.database().ref('ClassData/EventShop/drawings').once('value');
+    const drVal=drSnap.val()||{};
+    for(const k of Object.keys(drVal)){
+      if(k.endsWith('_'+val)) await firebase.database().ref('ClassData/EventShop/drawings/'+k).remove();
+    }
+    // 학생 가방 events 정리
+    const stuSnap=await shopRef.child('stu').once('value');
+    const stuRaw=stuSnap.val()||{};
+    const entries=Array.isArray(stuRaw)
+      ? stuRaw.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
+      : Object.entries(stuRaw);
+    for(const [key,stu] of entries){
+      if(!stu||!Array.isArray(stu.inv)) continue;
+      let changed=false;
+      const newInv=stu.inv.map(it=>{
+        if(!it||!Array.isArray(it.events)) return it;
+        const filtered=it.events.filter(ev=>{
+          const k=ev&&(ev.nomKey||ev.dalKey)||'';
+          return !(k&&k.startsWith(val+'_'));
+        });
+        if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
+        return it;
+      }).filter(it=>{
+        if(it&&Array.isArray(it.events)&&it.events.length===0&&(it.n==='달고나'||it.n==='골든티켓'||it.n==='goldenTicket'||it.n==='dalgona')) {changed=true;return false;}
+        return true;
+      });
+      if(changed) await shopRef.child('stu/'+key+'/inv').set(newInv);
+    }
+  }catch(e){console.warn('월 잔여데이터 정리 실패',e);}
   await saveMonthToFirebase(val,label);
   await saengRef.child('month_status/'+val).set({month:val,status:'active',opened_at:Date.now()});
   await saengRef.child('months_hidden/'+val).remove();
@@ -2419,6 +2641,9 @@ function loadOverview(forceToast){
   detachOverviewListener();
   _overviewMonth=month;
   _overviewRecCache={};
+  // 새 월 구독 시작: 이전 월 표가 남아 있지 않도록 초기화
+  const _ot=document.getElementById('overviewTable');
+  if(_ot) _ot.innerHTML='로딩 중...';
   const ref=saengRef.child('records/'+month);
   // child_* 리스너: 변경된 학생 1명만 다운로드 (이전: on('value')로 전체 학생 records)
   const onAdd=ref.on('child_added',s=>{
@@ -2438,7 +2663,12 @@ function loadOverview(forceToast){
   });
   _overviewListener={ref,onAdd,onCh,onRm};
   // 빈 월 대비: 일정 시간 후에도 데이터 없으면 빈 상태 표시
-  setTimeout(()=>{ if(_overviewMonth===month && Object.keys(_overviewRecCache).length===0) renderOverview({},month); },200);
+  setTimeout(()=>{
+    if(_overviewMonth!==month) return;
+    const el=document.getElementById('overviewTable');
+    // 아직 표가 안 그려졌으면(로딩 텍스트 그대로) 현재 캐시로 강제 렌더
+    if(el && el.querySelector('table')===null) renderOverview(_overviewRecCache,month);
+  },500);
   if(forceToast===true) toast('🔄 새로고침');
 }
 window._overviewSort={col:'no',dir:1};
@@ -2449,6 +2679,7 @@ window.sortOverview=function(col){
   if(_overviewMonth) renderOverview(_overviewRecCache,_overviewMonth);
 };
 function renderOverview(records,month){
+ try{
   const students=(shopData&&shopData.stu)||[];
   const titleEl=document.getElementById('overviewTitle');
   if(titleEl) titleEl.textContent='학생별 제출 현황';
@@ -2507,6 +2738,11 @@ function renderOverview(records,month){
   });
   html+='</tbody></table>';
   document.getElementById('overviewTable').innerHTML=html;
+ }catch(e){
+  console.error('renderOverview 오류:',e);
+  const el=document.getElementById('overviewTable');
+  if(el) el.innerHTML='<div style="color:#d33;padding:16px;font-size:13px;white-space:pre-wrap;">표시 중 오류가 발생했어요:\n'+(e&&e.message||e)+'</div>';
+ }
 }
 
 function showStatusMini(cd,month,event){
@@ -2577,7 +2813,7 @@ function showStatusMini(cd,month,event){
           <span>→ <b>${dal.to_name||'?'}</b> | ${giftText}</span>
           <span class="status-badge ${nomCls(dal)}" style="font-size:11px;">${nomLbl(dal)}</span>
         </div>
-        ${(dal.drawingRef||dal.drawing)?`<img ${dal.drawing?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:80px;border-radius:8px;margin-bottom:4px;">`:''}
+        ${(dal.drawingRef||dal.drawing)?`<img ${(!dal.drawingRef && dal.drawing)?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:80px;border-radius:8px;margin-bottom:4px;">`:''}
         <div style="color:#555;">${dal.message||''}</div>
       </div>`;
 
@@ -2713,7 +2949,7 @@ async function loadDetailPanel(cd,month){
       ${dal?`<span class="status-badge ${nomClass(dal)}" style="margin-left:8px;font-size:12px;">${nomStatus(dal)}</span>`:''}
     </h5>
       ${dal?`<div style="font-size:13px;color:#888;margin-bottom:4px;">선물: ${giftText}</div>
-      ${(dal.drawingRef||dal.drawing)?`<img ${dal.drawing?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:160px;border-radius:10px;border:2px solid #FFCA28;margin-bottom:6px;">`:''}
+      ${(dal.drawingRef||dal.drawing)?`<img ${(!dal.drawingRef && dal.drawing)?`src="${dal.drawing}"`:''} data-drawing-ref="${dal.drawingRef||('student_'+cd+'_'+month)}" style="max-height:160px;border-radius:10px;border:2px solid #FFCA28;margin-bottom:6px;">`:''}
       <div class="view-text">${dal.message||''}</div>
       ${dal.status==='pending'?`<button class="action-btn btn-approve" style="margin-top:6px;" onclick="updateDalgona('${month+'_'+cd+'_dalgona'}','approved',this.closest('.stu-detail-inner').id)">✅ 승인</button><button class="action-btn btn-reject" style="margin-top:6px;" onclick="updateDalgona('${month+'_'+cd+'_dalgona'}','rejected',this.closest('.stu-detail-inner').id)">❌ 반려</button>`:''}`:'(없음)'}
     </div>
@@ -3211,16 +3447,22 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
   }
   let approved_noms = includeDone ? [...noms_pending, ...noms_done] : noms_pending;
   let approved_dals = includeDone ? [...dals_pending, ...dals_done] : dals_pending;
-  // shopRef 학생 데이터 가져오기 (cd→idx 매핑용)
+  // shopRef 학생 데이터 가져오기 (cd→Firebase key 매핑용)
+  // 주의: Firebase가 sparse 배열을 객체로 직렬화할 수 있으므로 원래 key를 보존해야 함
+  // (Object.values 배열 인덱스로 쓰면 stu/0/inv 가 다른 학생 노드를 덮어쓰는 사고 발생)
   const stuSnap=await shopRef.child('stu').once('value');
-  let stu=stuSnap.val()||[];
-  if(!Array.isArray(stu)) stu=Object.values(stu||{});
+  const stuRaw=stuSnap.val()||{};
+  const stuEntries = Array.isArray(stuRaw)
+    ? stuRaw.map((v,i)=>[String(i), v]).filter(([_,v])=>v!=null)
+    : Object.entries(stuRaw);
+  const stu = stuEntries.map(([_,v])=>v);
+  const stuKeys = stuEntries.map(([k,_])=>k); // Firebase 원래 key (idx → key 매핑)
   const findStu=(cd)=>stu.findIndex(s=>s&&String(s.cd).trim()===String(cd).trim());
   // 학생별 inv를 surgical update — 다른 필드 영향 없음
   const dirtyInvs={};
   const getInv=async(idx)=>{
     if(dirtyInvs[idx]!==undefined) return dirtyInvs[idx];
-    const snap=await shopRef.child('stu/'+idx+'/inv').once('value');
+    const snap=await shopRef.child('stu/'+stuKeys[idx]+'/inv').once('value');
     let inv=snap.val()||[];
     if(!Array.isArray(inv)) inv=Object.values(inv||{}).filter(Boolean);
     dirtyInvs[idx]=inv;
@@ -3333,6 +3575,7 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     const evList = it.events||[];
     const existingDal = evList.find(ev=>ev&&ev.dalKey===d.key);
     if(existingDal){
+      console.warn('[달고나] 이미 발송된 항목 — 재발송 모드로 ts만 갱신 (쿠키 차감/수라상 부여 스킵)', d.key);
       existingDal.ts = ts;
       await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
       if(d.from) recipientCds.add(String(d.from).trim());
@@ -3351,19 +3594,28 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
       drawingId=ts+'_'+(d.from||'x')+'_'+(d.to||'y');
       // 레거시 base64면 Cloudinary 업로드 후 URL만 Firebase에 저장
       if(typeof drawingData==='string'&&drawingData.startsWith('data:')){
-        try{ drawingData=await uploadToCloudinary(drawingData); }catch(e){ drawingData=''; }
+        try{ const _r=await uploadToCloudinary(drawingData, 'saeng_' + drawingId); drawingData=_r.url||''; }catch(e){ drawingData=''; }
       }
       if(drawingData) await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(drawingData);
     }
     it.events.push({ts,dalKey:d.key,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId});
+    console.log('[달고나 발송]', {dalKey:d.key, from:d.from, to:d.to, gift:d.gift});
     // 간식: 보낸 학생 -5쿠키 + 받은 학생 가방에 왕의 수라상 +1 (자동)
     if(d.gift==='cookie'){
       const fromIdx=findStu(d.from);
+      console.log('[간식] fromIdx=', fromIdx, 'from=', d.from);
       if(fromIdx>=0){
         senderShopUsedAdd[fromIdx]=(senderShopUsedAdd[fromIdx]||0)+5;
+        console.log('[간식] senderShopUsedAdd 누적', senderShopUsedAdd);
+      } else {
+        console.warn('[간식] 보낸 학생을 찾지 못함 → 쿠키 차감 스킵');
       }
       const surangReg=findItmByName('왕의 수라상');
-      inv.push({n:surangReg?.n||'왕의 수라상',i:surangReg?.i||'🍱',st:'active',g:surangReg?.g||'C'});
+      const surangItem={n:surangReg?.n||'왕의 수라상',i:surangReg?.i||'🍱',st:'active',g:surangReg?.g||'C'};
+      inv.push(surangItem);
+      console.log('[간식] 왕의수라상 push', surangItem, 'inv 길이=', inv.length);
+    } else {
+      console.log('[달고나] gift !== cookie → 차감/수라상 스킵', d.gift);
     }
     await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
     if(d.from) recipientCds.add(String(d.from).trim());
@@ -3378,13 +3630,16 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
   }
   // 학생별 inv 저장
   for(const [idx,inv] of Object.entries(dirtyInvs)){
-    await shopRef.child('stu/'+idx+'/inv').set(inv);
+    await shopRef.child('stu/'+stuKeys[idx]+'/inv').set(inv);
   }
   // 보낸 학생들의 shopUsed 누적 적용
+  console.log('[shopUsed 적용] senderShopUsedAdd=', senderShopUsedAdd);
   for(const [fromIdx,addAmt] of Object.entries(senderShopUsedAdd)){
-    const snap=await shopRef.child('stu/'+fromIdx+'/shopUsed').once('value');
+    const key=stuKeys[fromIdx];
+    const snap=await shopRef.child('stu/'+key+'/shopUsed').once('value');
     const cur=snap.val()||0;
-    await shopRef.child('stu/'+fromIdx+'/shopUsed').set(cur+addAmt);
+    await shopRef.child('stu/'+key+'/shopUsed').set(cur+addAmt);
+    console.log('[shopUsed] 학생 key=', key, '이전=', cur, '추가=', addAmt, '→', cur+addAmt);
   }
   if(!silent) {
     document.getElementById('_deliverResultModal')?.remove();
@@ -3424,7 +3679,9 @@ window.addEventListener('load',()=>{
   initCanvas();
   // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
   shopRef.child('stu').once('value',snap=>{
-    shopData={stu: snap.val()||[]};
+    const rawStu=snap.val();
+    const stuArr=Array.isArray(rawStu)?rawStu:(rawStu&&typeof rawStu==='object'?Object.values(rawStu):[]);
+    shopData={stu: stuArr};
     // URL param ?stu=CODE 자동 로그인
     const urlParams=new URLSearchParams(window.location.search);
     const urlStu=urlParams.get('stu');
