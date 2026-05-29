@@ -481,11 +481,11 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <div class="color-dot" style="background:white;border:2px solid #ccc" onclick="setColor('white',this)"></div>
               <button class="tool-btn active" id="pencilBtn" onclick="selectPencil()" title="연필">✏️</button>
               <button class="tool-btn" id="fillBtn" onclick="toggleFill()" title="페인트 (막힌 공간 채우기)">🖌️</button>
-              <button class="tool-btn" id="eraserBtn" onclick="toggleEraser()">지우개</button>
+              <button class="tool-btn" id="eraserBtn" onclick="toggleEraser()" title="지우개">🧽</button>
               <button class="tool-btn canvas-undo-btn" id="undoBtn" onclick="undoCanvas()" title="실행 취소 (Ctrl+Z)">↩</button>
               <button class="tool-btn canvas-redo-btn" id="redoBtn" onclick="redoCanvas()" title="다시 실행 (Ctrl+Y)">↪</button>
               <button class="tool-btn canvas-clear-btn" onclick="clearCanvas()">🗑</button>
-              <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">⛶</button>
+              <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">+</button>
             </div>
             <div class="brush-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:#888;">굵기:
               <input type="range" id="brushSize" min="1" max="10" value="3" style="flex:1;" oninput="updateCursorSize()">
@@ -2224,7 +2224,11 @@ function toggleCanvasFullscreen(){
     }
   }
   const fb=document.getElementById('fullscreenBtn');
-  if(fb) fb.textContent=wrap.classList.contains('fullscreen')?'🗕':'⛶';
+  if(fb){
+    const isFull=wrap.classList.contains('fullscreen');
+    fb.textContent=isFull?'−':'+';   // 전체화면=최소화(−), 미니=최대화(+)
+    fb.title=isFull?'최소화':'전체화면';
+  }
 }
 function floodFill(sx,sy,fillHex){
   if(!ctx) return;
