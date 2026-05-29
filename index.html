@@ -1549,12 +1549,6 @@ function autoSave(){
   // dalgona_drawing은 더 이상 records에 저장 안 함 (drawings 노드 분리)
   delete draft.dalgona_drawing;
   try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...draft,updated_at:Date.now()}));}catch(e){}
-  clearTimeout(autoSaveTimer);
-  // draft.month(예약 시점의 월)에 기록 — 디바운스 도중 월을 바꿔도 옛 월 데이터가 새 월로 새지 않음
-  const _saveMonth=draft.month||currentMonth;
-  autoSaveTimer=setTimeout(()=>{
-    saengRef.child('records/'+_saveMonth+'/'+me.cd).update({...draft,updated_at:Date.now()}).catch(()=>{});
-  },3000);
 }
 
 function collectFormData(status){
@@ -1637,11 +1631,20 @@ function listenMyRecord(){
       document.getElementById('saveDraftBtn').disabled=true;
       formLocked=true;
     }else{
-      // 활성 월이면 잠금 해제 (제출/승인 상태는 fillForm이 다시 처리)
-      formLocked=false;
-      setFormLocked(false);
-      document.getElementById('submitBtn').disabled=false;
-      document.getElementById('saveDraftBtn').disabled=false;
+      // 활성 월 확인: 서버 상태가 approved/미확인반려가 아닐 때만 잠금 해제
+      // (on('value') 캐시가 먼저 발화해 잠근 경우, approved/rejected는 유지)
+      let _lsStatus='';
+      try{const _r=localStorage.getItem('sw_lastRecord_'+me.cd+'_'+currentMonth);_lsStatus=(_r?JSON.parse(_r):null)?.status||'';}catch(e){}
+      const _keepLocked=_lsStatus==='approved'||(_lsStatus==='rejected'&&!_rejectionConfirmed);
+      if(!_keepLocked){
+        formLocked=false;
+        setFormLocked(false);
+        document.getElementById('submitBtn').disabled=false;
+        // 제출 후에는 임시저장 비활성 유지 — fillForm이 disabled=true로 설정한 것을 덮지 않음
+        if(_lsStatus!=='submitted'){
+          document.getElementById('saveDraftBtn').disabled=false;
+        }
+      }
     }
   });
   
@@ -1663,8 +1666,11 @@ function listenMyRecord(){
           localStorage.removeItem(canvasKey);
           localStorage.removeItem(lsKey);
         } else if(draft&&draft.month===currentMonth){
-          // stale 아닐 때만 즉시 복원
-          fillForm(draft);
+          // stale 아닐 때만 즉시 복원 (단, 서버가 rejected/approved면 draft로 덮지 않음)
+          const lsLast=localStorage.getItem(lsKey);
+          const lastServer=lsLast?JSON.parse(lsLast):null;
+          const serverLocked=lastServer&&(lastServer.status==='rejected'||lastServer.status==='approved');
+          if(!serverLocked) fillForm(draft);
         }
       }
     }catch(e){}
@@ -1700,9 +1706,9 @@ function listenMyRecord(){
         const dTs=Number(draft&&draft.updated_at)||0;
         const rTs=Number(d.updated_at)||0;
         // 승인/제출 상태가 remote에서 바뀐 경우는 remote 우선
-        const remoteLocked=(d.status==='approved'||d.status==='submitted'||d.status==='rejected');
+        const remoteLocked=(d.status==='approved'); // submitted/rejected는 학생이 계속 수정 가능 — 로컬 draft 우선 허용
         if(!remoteLocked && draft && draft.month===currentMonth && dTs>rTs){
-          useData={...d, ...draft};
+          useData={...d, ...draft, status:d.status, rejected_reason:d.rejected_reason||""}; // status는 서버 진실값 — 로컬 draft의 status(draft)가 rejected/submitted를 덮어쓰지 않도록
         }
       }
     }catch(e){}
@@ -1725,6 +1731,17 @@ function fillForm(data){
   document.getElementById('submittedBanner').classList.toggle('hidden',!(isSubmitted||isApproved));
   document.getElementById('rejectedBanner').classList.toggle('hidden',!isRejected);
   if(isRejected&&data.rejected_reason) document.getElementById('rejectedReason').textContent=data.rejected_reason;
+  // 반려 시: 새로고침 후에도 이미 확인한 반려면 모달 스킵
+  if(isRejected&&me){
+    try{
+      const _ck='sw_rejConfirmed_'+me.cd+'_'+currentMonth;
+      const _cr=localStorage.getItem(_ck);
+      if(_cr!==null){
+        if(_cr===(data.rejected_reason||'')){_rejectionConfirmed=true;}  // 같은 반려 → 확인 유지
+        else{_rejectionConfirmed=false;localStorage.removeItem(_ck);}    // 새 반려 → 다시 확인 필요
+      }
+    }catch(e){}
+  }
   // 반려 시: 폼 잠금 유지 + 반려 알림창 표시 (미확인 시)
   if(isRejected&&!_rejectionConfirmed){
     formLocked=true;
@@ -1837,6 +1854,11 @@ function showRejectionNotice(msg){
 function confirmRejectionNotice(){
   _rejectionConfirmed=true;
   document.getElementById('rejectionNoticeModal').classList.add('hidden');
+  // 새로고침 후에도 모달이 다시 뜨지 않도록 확인된 반려 메시지를 localStorage에 저장
+  try{
+    const _reason=document.getElementById('rejectionNoticeMsg')?.textContent||'';
+    if(me) localStorage.setItem('sw_rejConfirmed_'+me.cd+'_'+currentMonth,_reason);
+  }catch(e){}
   // 폼 잠금 해제
   formLocked=false;
   document.getElementById('submitBtn').disabled=false;
@@ -1846,12 +1868,20 @@ function confirmRejectionNotice(){
 
 // ═══ 저장/제출 ═══
 async function saveRecord(status='draft'){
-  if(status==='submitted') clearTimeout(autoSaveTimer); // 경쟁 방지
   const data=collectFormData(status);
-  if(status==='submitted') data.submitted_at=Date.now();
-  // dalgona_drawing은 records에 저장 안 함 (drawings 노드 분리)
   delete data.dalgona_drawing;
-  // 임시저장·제출 모두 그림 동기화 (학생 화면과 교사 화면이 어긋나지 않도록)
+  // 임시저장: localStorage + Firebase (.update, 동일 타임스탬프로 echo 안전)
+  // dTs===rTs 보장 → 리스너 병합 조건(dTs>rTs) 불충족 → 입력 덮어쓰기 없음
+  if(status==='draft'){
+    const _draftTs=Date.now();
+    const _draftData={...data,updated_at:_draftTs};
+    localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify(_draftData));
+    saengRef.child('records/'+currentMonth+'/'+me.cd).update(_draftData).catch(()=>{});
+    toast('💾 임시저장 완료!');
+    return;
+  }
+  // 제출: 그림 업로드 후 Firebase에 저장
+  data.submitted_at=Date.now();
   const _blank=isCanvasBlank();
   console.log('[saveRecord] status=', status, 'isCanvasBlank=', _blank);
   if(!_blank){
@@ -1865,19 +1895,17 @@ async function saveRecord(status='draft'){
     console.warn('[saveRecord] 캔버스가 비어 있다고 판단됨 → 업로드 스킵');
   }
   await saengRef.child('records/'+currentMonth+'/'+me.cd).update({...data,updated_at:Date.now()});
-  // 명시적 저장 완료 — 서버와 화면이 일치하므로 가드 해제 (이후 리스너 fill 허용)
   _formEditingDirty=false;
+  _rejectionConfirmed=false; // 재제출 후 다음 반려도 알림창이 뜨도록
+  try{if(me) localStorage.removeItem('sw_rejConfirmed_'+me.cd+'_'+currentMonth);}catch(e){}
   localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...data,updated_at:Date.now()}));
-  if(status==='submitted'){
-    await saveNominationsAndDalgona(data);
-    document.getElementById('submittedBanner').classList.remove('hidden');
-    document.getElementById('rejectedBanner').classList.add('hidden');
-    // 교사 승인 전까지 재수정/재제출 가능 — 임시저장만 막음
-    document.getElementById('submitBtn').disabled=false;
-    document.getElementById('saveDraftBtn').disabled=true;
-    formLocked=false; setFormLocked(false);
-  }
-  toast(status==='submitted'?'📮 제출 완료!':'💾 임시저장 완료!');
+  await saveNominationsAndDalgona(data);
+  document.getElementById('submittedBanner').classList.remove('hidden');
+  document.getElementById('rejectedBanner').classList.add('hidden');
+  document.getElementById('submitBtn').disabled=false;
+  document.getElementById('saveDraftBtn').disabled=true;
+  formLocked=false; setFormLocked(false);
+  toast('📮 제출 완료!');
 }
 
 async function saveNominationsAndDalgona(data){
@@ -2320,6 +2348,7 @@ function loadCanvasFromData(dataUrl){
   // Cloudinary 등 HTTPS 이미지는 CORS 허용해야 toDataURL이 가능
   if(/^https?:/i.test(dataUrl)) img.crossOrigin='anonymous';
   img.onload=()=>{
+    if(_canvasUserDirty) return; // 이미지 로딩 지연 중 학생이 그리기 시작했으면 덮어쓰기 금지
     ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(img,0,0,canvas.width,canvas.height);
   };
@@ -2383,8 +2412,7 @@ async function pressBuzzer(){
   if(!data.active) return;
   const list=data.pressList?Object.values(data.pressList):[];
   if(list.find(p=>String(p.cd)===String(me.cd))) return;
-  const idx=list.length;
-  await saengRef.child('buzzer/pressList/'+idx).set({cd:me.cd,name:me.nm,time:Date.now()});
+  await saengRef.child('buzzer/pressList').push({cd:me.cd,name:me.nm,time:Date.now()});
 }
 
 // ═══ 부저 (교사) ═══
@@ -2583,8 +2611,7 @@ async function dismissTimerEnd(){
 // 교사 측에서 end_at 지났으면 show_end=true 설정
 setInterval(async()=>{
   if(!isTeacher) return;
-  const snap=await saengRef.child('timer').once('value');
-  const d=snap.val()||{};
+  const d=_lastTimerState||{};
   if(d.active&&!d.paused&&!d.show_end&&d.end_at&&Date.now()>=d.end_at){
     await saengRef.child('timer').update({show_end:true,active:false});
   }
@@ -3219,7 +3246,7 @@ async function clearAllData(){
       saengRef.child('notifications').remove(),
       firebase.database().ref('ClassData/EventShop/drawings').remove(),
     ]);
-    _monthsCache={};_monthsOrder={};_monthStatus={};
+    _monthsCache={};_monthsOrder={};_hiddenCache={};
     populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
     toast('💣 전체 초기화 완료');
   }catch(e){
