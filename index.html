@@ -470,7 +470,11 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
           <div class="nom-label" style="font-size:22px;color:#E65100;">🎨 그림 선물</div>
           <div class="canvas-wrap">
             <div class="canvas-tools">
-              <span style="font-size:12px;color:#888;">색:</span>
+              <span style="font-size:12px;color:#888;">굵기:</span>
+              <input type="range" id="brushSize" min="1" max="40" value="5"
+                style="width:120px;flex-shrink:0;cursor:pointer;touch-action:auto;pointer-events:auto;"
+                oninput="updateCursorSize()">
+              <span style="font-size:12px;color:#888;margin-left:4px;">색:</span>
               <div class="color-dot active" style="background:#333" onclick="setColor('#333',this)"></div>
               <div class="color-dot" style="background:#FF5252" onclick="setColor('#FF5252',this)"></div>
               <div class="color-dot" style="background:#FF7043" onclick="setColor('#FF7043',this)"></div>
@@ -486,9 +490,6 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <button class="tool-btn canvas-redo-btn" id="redoBtn" onclick="redoCanvas()" title="다시 실행 (Ctrl+Y)">↪</button>
               <button class="tool-btn canvas-clear-btn" onclick="clearCanvas()">🗑</button>
               <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">+</button>
-            </div>
-            <div class="brush-size-row" style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:12px;color:#888;">굵기:
-              <input type="range" id="brushSize" min="1" max="10" value="3" style="flex:1;" oninput="updateCursorSize()">
             </div>
             <canvas id="dalgonaCanvas" width="1040" height="780" style="width:100%;height:auto;display:block;background:white;touch-action:none;-webkit-user-select:none;user-select:none;"></canvas>
           </div>
@@ -1829,7 +1830,7 @@ function fillForm(data){
 }
 
 function setFormLocked(locked){
-  document.querySelectorAll('#studentApp textarea,#studentApp input:not(.color-dot),#studentApp select').forEach(f=>f.disabled=locked);
+  document.querySelectorAll('#studentApp textarea,#studentApp input:not(.color-dot):not(#brushSize),#studentApp select').forEach(f=>f.disabled=locked);
   document.querySelectorAll('.gem-chip').forEach(el=>el.style.pointerEvents=locked?'none':'');
   document.querySelectorAll('.gift-option').forEach(el=>el.style.pointerEvents=locked?'none':'');
 }
