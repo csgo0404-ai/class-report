@@ -1197,8 +1197,8 @@ function populateMonthSelectors(months,selectors){
       sel.appendChild(opt);
     });
     if(prev&&entries.some(([v])=>v===prev)) sel.value=prev;
-    else if(id==='tMonthSel' && entries.length){
-      // 학생별 제출 현황: 항상 최신 달이 기본 선택
+    else if((id==='tMonthSel'||id==='tMonthSel5') && entries.length){
+      // 항상 최신 달이 기본 선택
       sel.value=entries[entries.length-1][0];
     }
   });
