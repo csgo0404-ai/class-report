@@ -500,7 +500,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <div class="gift-options">
           <div class="gift-option" data-gift="cookie" onclick="selectGift('cookie',this)">🍪 간식 (5쿠키)</div>
           <div class="gift-option selected" data-gift="마음" onclick="selectGift('마음',this)">
-            ❤️ 마음 : <input id="giftHeartText" class="gift-custom-input" placeholder="직접 입력" onclick="event.stopPropagation();selectGift('마음',this.closest('.gift-option'))">
+            ❤️ 마음 : <input id="giftHeartText" class="gift-custom-input" placeholder="직접 입력" oninput="autoSave()" onclick="event.stopPropagation();selectGift('마음',this.closest('.gift-option'))">
           </div>
         </div>
       </div>
@@ -740,10 +740,18 @@ const CLOUDINARY_CLOUD='dtzknm7gz';
 const CLOUDINARY_PRESET='csgo0404';
 // Cloudflare Worker 프록시 (Cloudinary 서명 destroy 위임) — 동화책 제작.html과 공용
 const API_URL='https://donghwa-api.csgo0404.workers.dev';
+// 타임아웃 있는 fetch. 학교 와이파이가 반쯤 끊긴 상태(half-open)에서 fetch는 OS TCP 타임아웃까지
+//   몇 분씩 매달려 있어, 학생 눈엔 태블릿이 멈춘 것처럼 보이고 결국 강제종료 → 제출 유실로 이어졌다.
+async function _fetchT(url,opts,ms){
+  const ac=new AbortController();
+  const t=setTimeout(()=>ac.abort(),ms||20000);
+  try{ return await fetch(url,{...(opts||{}),signal:ac.signal}); }
+  finally{ clearTimeout(t); }
+}
 async function _cloudinaryDestroy(publicId){
   if(!publicId) return false;
   try{
-    const r=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'cloudinaryDestroy',publicId})});
+    const r=await _fetchT(API_URL,{method:'POST',body:JSON.stringify({action:'cloudinaryDestroy',publicId})},20000);
     const j=await r.json().catch(()=>({}));
     console.log('[destroy] Worker 응답', j);
     return !!(j&&(j.ok||j.result==='ok'));
@@ -757,8 +765,27 @@ async function uploadToCloudinary(dataUrl, publicId, opts){
   if(publicId){
     // 서명된 업로드 → 같은 public_id 덮어쓰기 가능
     const sanitized=_sanitizePublicId(publicId);
-    const signRes=await fetch(API_URL,{method:'POST',body:JSON.stringify({action:'signUpload',publicId:sanitized})});
-    const sign=await signRes.json().catch(()=>({}));
+    // 서명 호출이 업로드보다 "앞"에 있어서, 타이머 만료 지터 끝에 걸린 태블릿은 이미 다른 25대가
+    //   업로드 중인 포화된 링크로 왕복해야 한다 → 여기가 제일 먼저 터진다.
+    //   ①타임아웃 20→30초 ②일시적 혼잡은 1회 재시도로 흡수(서명 요청은 ~200B라 재시도가 싸다).
+    let sign=null;
+    for(let attempt=0;attempt<2;attempt++){
+      try{
+        const signRes=await _fetchT(API_URL,{method:'POST',body:JSON.stringify({action:'signUpload',publicId:sanitized})},30000);
+        sign=await signRes.json().catch(()=>({}));
+        if(sign&&sign.ok) break;
+      }catch(e){
+        if(attempt===1) throw e;
+        console.warn('[upload] 서명 실패 — 재시도', e&&e.message);
+      }
+      if(attempt===0){
+        // 재시도를 넣으면서 최악 대기가 80초→약 120초(서명30+백오프2+재시도30+업로드60)가 됐다.
+        //   그 시간 동안 버튼은 "저장 중…"만 띄우고 아무 말이 없으면, 타임아웃을 넣은 원래 이유
+        //   ("멈춘 줄 알고 강제종료 → 제출 유실")가 그대로 되살아난다. 진행 중임을 알린다.
+        toast('⏳ 그림 전송이 느려요 — 다시 시도 중…');
+        await new Promise(r=>setTimeout(r,1000+Math.random()*1000)); // 백오프+지터(재시도끼리 다시 몰리지 않게)
+      }
+    }
     if(!sign||!sign.ok) throw new Error('서명 실패: '+(sign&&sign.error||''));
     fd.append('public_id',sign.publicId);
     fd.append('overwrite','true');
@@ -772,7 +799,8 @@ async function uploadToCloudinary(dataUrl, publicId, opts){
   }
   const fetchOpts={method:'POST',body:fd};
   if(opts&&opts.keepalive) fetchOpts.keepalive=true;
-  const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,fetchOpts);
+  // 그림 업로드는 용량이 커 60s (서명 호출보다 넉넉히)
+  const r=await _fetchT(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,fetchOpts,60000);
   console.log('[upload] HTTP', r.status, 'public_id=', publicId);
   if(!r.ok){
     let body=''; try{ body=await r.text(); }catch(e){}
@@ -783,17 +811,51 @@ async function uploadToCloudinary(dataUrl, publicId, opts){
   console.log('[upload] Cloudinary 응답 JSON', {public_id:j.public_id, version:j.version, secure_url:j.secure_url});
   return {url:j.secure_url||'', version:j.version};
 }
-// 그림 업로드: 서명된 업로드로 같은 public_id에 덮어쓰기 = 1파일 유지
+// 같은 그림의 동시 업로드 정리.
+//   fillForm은 원격이 없으면 로컬 백업을 자동 업로드하는데, 로그인 시 fillForm이 두 번 발화해
+//   (즉시 draft 복원 + 리스너) 똑같은 백업을 2번 올렸다. 업로드가 실패하면 원격이 계속 없어
+//   리스너가 뛸 때마다 재시도하는 루프도 됐다.
+//   ⚠️ drawingId만으로 dedup하면 안 된다 — 진행 중인 저해상 JPEG 업로드에 임시저장의 원본 PNG가
+//   합쳐져 좋은 그림이 영영 안 올라간다. 내용이 같을 때만 재사용하고, 다르면 직렬화한다
+//   (같은 public_id에 동시 쓰기가 겹치면 어느 쪽이 남을지 순서를 보장할 수 없다).
+const _syncInflight=new Map(); // drawingId → {data, promise}
+// drawingId → RTDB 포인터(drawings/{id})가 서버에 durable하게 확정됐는가.
+//   Cloudinary 업로드가 성공해도 포인터 write가 타임아웃(오프라인, 큐에만 존재)이면 false다.
+//   로컬 크래시 백업(sw_canvas_) 삭제를 이 값으로 게이트한다 — 큐만 있고 서버 미확정인 상태에서
+//   백업을 지우면 재연결 전 태블릿이 죽을 때 그림이 영구 소실된다(포인터·백업 둘 다 없음).
+const _drawingSaved=new Map();
 async function syncDrawing(drawingId,dataUrl){
   if(!dataUrl) { console.warn('[sync] dataUrl 비어있음'); return ''; }
+  const prev=_syncInflight.get(drawingId);
+  if(prev&&prev.data===dataUrl){ console.log('[sync] 같은 내용 업로드가 진행 중 — 재사용'); return prev.promise; }
+  // 맵 등록을 await "앞"에서 동기로 해야 한다. await 뒤에 등록하면 내용이 다른 호출 둘이 동시에
+  //   들어왔을 때 둘 다 prev를 기다린 뒤 나란히 진행해(둘 다 아직 미등록) 직렬화가 깨진다.
+  //   여기서는 p를 먼저 만들어 등록하므로 세 번째 호출은 p에 이어 붙는다.
+  const p=(async()=>{
+    if(prev){ try{ await prev.promise; }catch(_){} } // 앞 업로드가 끝난 뒤에 올린다
+    return _syncDrawingInner(drawingId,dataUrl);
+  })();
+  _syncInflight.set(drawingId,{data:dataUrl,promise:p});
+  try{ return await p; }
+  finally{ const e=_syncInflight.get(drawingId); if(e&&e.promise===p) _syncInflight.delete(drawingId); }
+}
+// 그림 업로드: 서명된 업로드로 같은 public_id에 덮어쓰기 = 1파일 유지
+async function _syncDrawingInner(drawingId,dataUrl){
   try{
     const stableId=_sanitizePublicId('saeng_'+drawingId);
     console.log('[sync] 업로드 시작 (덮어쓰기)', {stableId, dataLen:dataUrl.length});
     const res=await uploadToCloudinary(dataUrl, stableId);
     console.log('[sync] 업로드 응답', res);
     if(res.url){
-      await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(res.url);
-      console.log('[sync] Firebase drawings 노드 갱신 완료', {drawingId, url:res.url});
+      // ⚠️ 생 await 금지: 오프라인/소켓 끊김이면 RTDB 쓰기는 resolve도 reject도 안 하고 큐에만 남아
+      //   여기서 영원히 멈춘다 → syncDrawing이 안 끝나 doFinalSubmit/saveRecord의 finally가 미실행 →
+      //   _submitting/_savingDraft가 true로 박제되고 제출/임시저장 버튼이 세션 내내 잠긴다.
+      //   업로드는 이미 성공(Cloudinary에 존재)했으므로 write는 타임아웃해도 큐에 남겨두고 URL을 반환한다.
+      //   단 durable 여부(_drawingSaved)를 기록해, 서버 미확정이면 로컬 백업을 지우지 않게 한다.
+      _drawingSaved.set(drawingId,false);
+      try{ await _withTimeout(firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(res.url),15000); _drawingSaved.set(drawingId,true); }
+      catch(e){ console.warn('[sync] drawings 노드 write 지연 — 큐에 남아 재연결 시 반영(백업 유지)', e); }
+      console.log('[sync] Firebase drawings 노드 갱신 요청 완료', {drawingId, url:res.url, durable:_drawingSaved.get(drawingId)});
       return res.url;
     } else {
       console.error('[sync] Cloudinary가 빈 URL 반환');
@@ -808,12 +870,24 @@ const saengRef=fdb.ref('ClassData/Saengwal');
 
 // ═══ 상태 ═══
 let shopData=null,me=null,isTeacher=false;
+// cd → EventShop stu의 Firebase 원래 key. 부팅 시 stu 스냅샷에서 1회 구성해,
+//   본인 노드만 콕 집어 읽을 때 쓴다(전체 노드 재다운로드 방지).
+let _shopKeyByCd={};
 let currentMonth=getCurrentMonth();
 let lackSelected=new Set(),fullSelected=new Set();
 let currentGift='마음';
 let formLocked=false;
 // 학생이 입력 중일 때 실시간 리스너(fillForm)가 입력칸을 옛 서버값으로 덮어쓰지 않도록 가드
 let _formEditingDirty=false;
+// 이 기록(월/학생)에 서버 데이터를 한 번이라도 채웠는지. _formEditingDirty가 첫 채우기까지
+//   막아버리는 것을 방지 — resetForm에서 false로 되돌린다.
+let _formFilledOnce=false;
+// _formFilledOnce와 구분: 이건 "리스너가 **서버 데이터**로 폼 baseline을 채웠는가"만 표시한다.
+//   _formFilledOnce는 즉시복원/remote-empty의 fillForm(로컬 draft)로도 켜져, 그걸 full 판정에 쓰면
+//   부분 draft가 full:true로 승격돼 통째병합이 서버를 덮는다(회귀). full은 이 플래그로만 판정한다.
+let _serverReconciled=false;
+// 학생이 선물을 직접 골랐는지. 기본값 '마음'과 학생 선택 '마음'을 구분할 방법이 이것뿐이다.
+let _giftUserPicked=false;
 let _myRecordListener=null,_myRecordRef=null;
 let _overviewListener=null,_overviewMonth=null;
 let _rejectionConfirmed=false;
@@ -945,6 +1019,10 @@ function buildStudentMonthTabs(){
 }
 async function switchStudentMonth(val){
   if(val===currentMonth) return;
+  // 캔버스 백업을 "이전 월 키로" 확정 저장한 뒤 월을 바꾼다.
+  //   _writeCanvasDraft는 발화 시점의 currentMonth를 읽으므로, 700ms 디바운스 안에 월을 바꾸면
+  //   resetForm으로 비워진 캔버스가 "새 월 키"로 저장돼(=빈 그림 판정) 새 월의 백업까지 지워졌다.
+  _flushCanvasSave();
   clearTimeout(autoSaveTimer); // 대기 중 자동저장이 이전 월 데이터를 새 월에 쓰지 않도록 취소
   detachMyRecordListener();
   currentMonth=val;
@@ -1113,6 +1191,17 @@ async function bulkApproveMonth(month){
   }
 }
 
+// 레코드가 정본 — 아직 배달 전인 추천/달고나는 내용을 레코드에 맞춘다.
+//   예전엔 "없으면 생성"만 하고 기존 노드는 month/type/drawingRef만 보정해서, 내용이 낡은 채로 남았다:
+//   학생이 반려 후 수신자를 B→C로 바꿔 재제출했는데 그때 nominations 쓰기가 실패/타임아웃하면
+//   (레코드 쓰기는 성공했으므로 제출은 완료 처리된다) 승인 시 ensure가 "이미 있음"으로 넘어가
+//   **달고나가 C가 아니라 B에게 배달되고 보낸 학생 쿠키도 B 기준으로 빠졌다**.
+//   ⚠️ 배달된 항목은 건드리지 않는다 — 이미 친구 가방에 들어갔고 수신자 변경은 재배달되지 않는다(돈 안전 우선).
+//   status는 손대지 않는다(pending→approved 승격은 autoApproveRelated의 몫).
+function _syncNomFromRecord(v,fix,want){
+  if(v.delivered) return;
+  for(const k in want){ if(v[k]!==want[k]) fix[k]=want[k]; }
+}
 // records 데이터로 nomination/dalgona가 없으면 생성 (작성만 하고 제출 안 한 학생 대비)
 async function ensureNominationsAndDalgonaForRecord(cd, month, rec){
   if(!rec) return;
@@ -1132,9 +1221,10 @@ async function ensureNominationsAndDalgonaForRecord(cd, month, rec){
       const fix={};
       if(v.month!==month) fix.month=month;
       if(!v.type) fix.type='defender';
+      _syncNomFromRecord(v,fix,{to:defTo,to_name:getStudentName(defTo),reason:rec.defender_reason||'',from_name:stuName});
       if(Object.keys(fix).length) await saengRef.child('nominations/'+key).update(fix);
     }
-  }
+  } else { await _removeStaleNom('nominations/'+month+'_'+cd+'_defender'); }
   if(proTo){
     const key=month+'_'+cd+'_promising';
     const snap=await saengRef.child('nominations/'+key).once('value');
@@ -1145,9 +1235,10 @@ async function ensureNominationsAndDalgonaForRecord(cd, month, rec){
       const fix={};
       if(v.month!==month) fix.month=month;
       if(!v.type) fix.type='promising';
+      _syncNomFromRecord(v,fix,{to:proTo,to_name:getStudentName(proTo),reason:rec.promising_reason||'',from_name:stuName});
       if(Object.keys(fix).length) await saengRef.child('nominations/'+key).update(fix);
     }
-  }
+  } else { await _removeStaleNom('nominations/'+month+'_'+cd+'_promising'); }
   if(dalTo){
     const key=month+'_'+cd+'_dalgona';
     const snap=await saengRef.child('dalgona/'+key).once('value');
@@ -1159,9 +1250,23 @@ async function ensureNominationsAndDalgonaForRecord(cd, month, rec){
       if(v.month!==month) fix.month=month;
       // drawing 필드는 이제 drawingRef로 통일
       if(!v.drawingRef) fix.drawingRef='student_'+cd+'_'+month;
+      _syncNomFromRecord(v,fix,{to:dalTo,to_name:getStudentName(dalTo),message:rec.dalgona_msg||'',
+        gift:rec.dalgona_gift||'cookie',gift_heart:rec.dalgona_heart||'',gift_etc:rec.dalgona_etc||'',from_name:stuName});
       if(Object.keys(fix).length) await saengRef.child('dalgona/'+key).update(fix);
     }
-  }
+  } else { await _removeStaleNom('dalgona/'+month+'_'+cd+'_dalgona'); }
+}
+
+// 학생이 수신자를 비워 재제출하면 레코드 필드가 ''가 된다. 옛 pending 노드가 남아 있으면
+//   받을 사람 없는 추천/달고나가 그대로 승인·발송되고(달고나는 보낸 학생 쿠키 5개까지 차감) 교사는
+//   dalgona 노드만 보고 그리므로 알아챌 단서가 없다. 배달 전(!delivered) 항목만 제거한다 —
+//   이미 배달된 건 친구 가방에 들어갔고 되돌리면 재발송 시 쿠키 이중차감이므로 불가침(돈 안전 우선).
+async function _removeStaleNom(path){
+  try{
+    const snap=await saengRef.child(path).once('value');
+    const v=snap.val();
+    if(v && !v.delivered) await saengRef.child(path).remove();
+  }catch(e){}
 }
 
 async function clickMonthToggleFor(month){
@@ -1256,9 +1361,13 @@ async function removeMonthFromFirebase(val){
       ? stuRaw.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
       : Object.entries(stuRaw);
     for(const [key,stu] of entries){
-      if(!stu||!Array.isArray(stu.inv)) continue;
+      // inv는 Firebase에서 배열로도 객체로도 돌아온다(_normInv/getInv가 양쪽을 다루는 이유).
+      //   Array.isArray만 보면 객체 형태인 학생은 통째로 건너뛰어, 지운 달의 events가 그 학생
+      //   가방에 영영 남는다 — 삭제는 "성공"으로 보고된 채로.
+      const _inv=stu&&(Array.isArray(stu.inv)?stu.inv:(stu.inv?Object.values(stu.inv).filter(Boolean):null));
+      if(!_inv||!_inv.length) continue;
       let changed=false;
-      const newInv=stu.inv.map(it=>{
+      const newInv=_inv.map(it=>{
         if(!it||!Array.isArray(it.events)) return it;
         const filtered=it.events.filter(ev=>{
           const k=ev&&(ev.nomKey||ev.dalKey)||'';
@@ -1266,13 +1375,15 @@ async function removeMonthFromFirebase(val){
         });
         if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
         return it;
-      // 이벤트가 모두 사라진 special 아이템(events 배열만 의미 있는 것)도 정리
-      }).filter(it=>{
-        // dalgona/goldenTicket처럼 events-only 아이템은 events 비면 제거
-        if(it&&Array.isArray(it.events)&&it.events.length===0&&(it.n==='달고나'||it.n==='골든티켓'||it.n==='goldenTicket'||it.n==='dalgona')) {changed=true;return false;}
-        return true;
       });
-      if(changed) await shopRef.child('stu/'+key+'/inv').set(newInv);
+      // 실제 삭제는 아래 _filterMonthInv 트랜잭션이 수행한다(직접 지급/구매한 special 아이템 보존 로직 포함).
+      //   여기 changed는 "이 달 이벤트가 줄어든 학생인가"만 판정 — map의 filtered 비교로 이미 정확하다.
+      if(changed){
+        await shopRef.child('stu/'+key+'/inv').transaction(cur=>_filterMonthInv(cur,val));
+        // 이벤트 상점의 증분 동기화가 inv 변경을 보도록 — 빠뜨리면 상점을 켜둔 학생이 옛 inv를
+        //   계속 쓰다가 다음 쓰기에서 방금 정리한 events를 되살린다.
+        try{ await shopRef.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
+      }
     }
   }catch(e){console.warn('학생 가방 정리 실패',e);}
   delete _monthsCache[val];
@@ -1343,8 +1454,13 @@ function loginTeacher(){
   else alert('비밀번호 오류');
 }
 function logout(){
+  _flushCanvasSave(); // 대기 중 캔버스 백업을 me가 살아있을 때 확정(_writeCanvasDraft는 me 없으면 early-return)
   detachMyRecordListener();
   detachOverviewListener();
+  // 부저/타이머 리스너도 해제. 남겨두면 로그아웃 후에도 콜백이 돌며 me.cd를 참조해 TypeError.
+  saengRef.child('buzzer').off('value');
+  saengRef.child('timer').off('value');
+  saengRef.child('force_reload').off('value'); // 무해하지만 재로그인 전까지 남는 구독 정리(재부착은 listenForceReload에서 off→on)
   me=null;isTeacher=false;
   lackSelected=new Set();fullSelected=new Set();
   currentGift='마음';formLocked=false;_rejectionConfirmed=false;
@@ -1549,7 +1665,17 @@ function autoSave(){
   if(isSubmittedUI) delete draft.status;
   // dalgona_drawing은 더 이상 records에 저장 안 함 (drawings 노드 분리)
   delete draft.dalgona_drawing;
-  try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...draft,updated_at:Date.now()}));}catch(e){}
+  // 다중탭 클로버 방지: 이 스냅샷이 완전히 빈 텍스트 폼(그림만 그리는 중이거나 갓 리셋된 새 탭 등)인데
+  //   다른 탭이 써 둔 draft에 실제 내용이 있으면 덮지 않는다. autoSave는 그리기(restoreCanvasState/floodFill/end)
+  //   에서도 불려 빈 폼 스냅샷을 쓰기 때문에, 새 탭 하나가 다른 탭의 작성분을 통째로 지우던 사고를 막는다.
+  //   (같은 탭에서 전부 지운 경우 draft 쓰기는 스킵되지만 💾/제출은 라이브 폼을 직접 저장하므로 손실 없음.)
+  const _txtBlank=v=>!v.lack_reason&&!v.full_reason&&!v.growth_plan&&!v.my_secret&&!v.teacher_msg&&!v.defender_reason&&!v.promising_reason&&!v.dalgona_msg&&!v.dalgona_heart&&!v.defender_to&&!v.promising_to&&!v.dalgona_to&&!(v.lack_names&&v.lack_names.length)&&!(v.full_names&&v.full_names.length)&&(!v.dalgona_gift||v.dalgona_gift==='마음');
+  if(_txtBlank(draft)){
+    try{ const ex=localStorage.getItem('sw_draft_'+me.cd+'_'+currentMonth); if(ex && !_txtBlank(JSON.parse(ex))) return; }catch(_){}
+  }
+  // full: 이 draft가 "완전한 의도"인지 표식. 서버로 폼이 한 번이라도 채워진 뒤(_formFilledOnce)의 편집이면
+  //   빈 필드=의도적 삭제로 신뢰한다. 서버 로드 전(fresh tablet 부분 입력)이면 full=false라 병합이 서버를 보호한다.
+  try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...draft,updated_at:Date.now(),full:_serverReconciled}));}catch(e){}
 }
 
 function collectFormData(status){
@@ -1578,6 +1704,30 @@ function collectFormData(status){
   };
 }
 
+// draft(로컬)를 서버 기록 위에 덮되, 기본값(빈 문자열/빈 배열/기본 선물)인 draft 필드는
+// 서버 값을 절대 덮지 않는다. autoSave가 collectFormData 전체 스냅샷(빈 칸 포함)을 쓰기 때문에,
+// 태블릿을 바꿔 로컬 draft가 없던 학생이 리스너 도착 전 한 글자만 쳐도 → autoSave가 "전 필드 빈 draft"를
+// 쓰고 → dTs>rTs 병합이 서버 기록 전체를 빈 값으로 덮어 지난 작성분이 영구 소실되던 사고를 막는다.
+// (fillForm의 _preserve/_put과 같은 "기본값이면 학생이 안 넣은 것" 규칙을 병합 단계에도 적용.
+//  status/rejected_reason은 언제나 서버 진실값을 유지한다.)
+function _mergeDraftOverServer(d,draft){
+  // draft.full===true → 서버 데이터로 폼이 채워진 뒤(또는 💾/제출로) 만들어진 "완전한" draft다.
+  //   이 경우 빈 필드는 학생이 의도적으로 지운 것이므로 그대로 반영해 삭제를 보존한다(옛 통째 병합 동작).
+  //   full이 아니면(서버 로드 전 부분 입력 — 태블릿 교체 등) 아래 안전 병합으로 빈 필드가 서버를 못 덮게 한다.
+  //   기존(full 필드 없는) draft는 안전 병합으로 처리 = 보수적 기본값.
+  if(draft.full===true) return {...d, ...draft, status:d.status, rejected_reason:d.rejected_reason||""};
+  const out={...d};
+  const _txt=['lack_reason','full_reason','growth_plan','my_secret','teacher_msg','defender_reason','promising_reason','dalgona_msg','dalgona_heart','dalgona_etc','defender_to','promising_to','dalgona_to','dalgona_drawing_id','student_name'];
+  _txt.forEach(k=>{ const v=draft[k]; if(v!=null && v!=='') out[k]=v; });
+  if(Array.isArray(draft.lack_names) && draft.lack_names.length) out.lack_names=draft.lack_names;
+  if(Array.isArray(draft.full_names) && draft.full_names.length) out.full_names=draft.full_names;
+  if(draft.dalgona_gift && draft.dalgona_gift!=='마음') out.dalgona_gift=draft.dalgona_gift;
+  if(draft.updated_at!=null) out.updated_at=draft.updated_at;
+  out.status=d.status;
+  out.rejected_reason=d.rejected_reason||"";
+  return out;
+}
+
 // ═══ 기록 로드 (실시간) ═══
 function resetForm(){
   lackSelected.clear();fullSelected.clear();
@@ -1593,6 +1743,20 @@ function resetForm(){
   document.querySelectorAll('.gift-option').forEach(o=>o.classList.toggle('selected',o.dataset.gift==='마음'));
   if(canvas&&ctx){ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);}
   _canvasUserDirty=false;_pendingCanvasData=null;_formEditingDirty=false;
+  _formFilledOnce=false; // 새 월/학생 → 첫 서버 채우기를 다시 보장
+  _serverReconciled=false; // 새 월/학생 → 서버 baseline 재확인 전까지 full 판정 금지
+  _giftUserPicked=false;
+  _canvasSuppressRestore=false; // 새 기록/월 로드 → 정상 복원 재개
+  _canvasEditSeq=0;_canvasUploadedSeq=0; // 빈 캔버스는 원격과 대조할 편집분이 없음
+  // 되돌리기 히스토리는 이 기록 전용이다. 예전엔 initCanvas에서 딱 한 번만 초기화돼
+  //   월을 바꾸거나 다른 학생이 로그인해도 남아 있었고, ↩ 한 번에 이전 달/다른 학생 그림이
+  //   튀어나왔다. undo가 결과를 백업·업로드까지 하게 된 뒤로는 그게 영구 오염이 된다.
+  _restoreGen++; // 진행 중인 복원 무효화
+  _canvasHistory=[];_canvasHistIdx=-1;
+  // try 필수: saveCanvasState의 toDataURL은 캔버스가 tainted면(CORS 실패) throw한다.
+  //   resetForm은 기록 로드의 핵심 경로(listenMyRecord)라, 여기서 예외가 나면 기록이 아예 안 열린다.
+  //   실패해도 history=[]/idx=-1이라 undo가 no-op이 될 뿐이라 안전하게 degrade한다.
+  if(canvas&&ctx){ try{ saveCanvasState(); }catch(_){} } // 빈 캔버스를 새 기준선으로
   document.getElementById('submittedBanner').classList.add('hidden');
   document.getElementById('rejectedBanner').classList.add('hidden');
   const sb=document.getElementById('submitBtn');const db=document.getElementById('saveDraftBtn');
@@ -1670,8 +1834,15 @@ function listenMyRecord(){
           // stale 아닐 때만 즉시 복원 (단, 서버가 rejected/approved면 draft로 덮지 않음)
           const lsLast=localStorage.getItem(lsKey);
           const lastServer=lsLast?JSON.parse(lsLast):null;
-          const serverLocked=lastServer&&(lastServer.status==='rejected'||lastServer.status==='approved');
-          if(!serverLocked) fillForm(draft);
+          // submitted도 포함: 이 즉시복원 경로엔 리스너(dTs>rTs)와 달리 타임스탬프 비교가 없어,
+          //   다른 기기에서 제출한 뒤 옛 draft가 남은 태블릿을 열면 stale draft가 화면을 덮고
+          //   제출됨 배너까지 숨겨 학생이 재작성/재제출하게 만들었다.
+          //   제출 후 수정분은 아래 리스너의 draft 병합(dTs>rTs)이 그대로 복원하므로 손실 없음.
+          const serverLocked=lastServer&&(lastServer.status==='rejected'||lastServer.status==='approved'||lastServer.status==='submitted');
+          // 타임스탬프 비교 추가: 다른 기기에서 더 최신 draft-status 기록을 만든 경우(rTs>dTs)
+          //   옛 로컬 draft가 화면을 덮지 않도록 스킵 → 아래 리스너가 서버 최신본으로 채운다.
+          const rTs=Number(lastServer&&lastServer.updated_at)||0;
+          if(!serverLocked && dTs>=rTs) fillForm(draft);
         }
       }
     }catch(e){}
@@ -1709,11 +1880,16 @@ function listenMyRecord(){
         // 승인/제출 상태가 remote에서 바뀐 경우는 remote 우선
         const remoteLocked=(d.status==='approved'); // submitted/rejected는 학생이 계속 수정 가능 — 로컬 draft 우선 허용
         if(!remoteLocked && draft && draft.month===currentMonth && dTs>rTs){
-          useData={...d, ...draft, status:d.status, rejected_reason:d.rejected_reason||""}; // status는 서버 진실값 — 로컬 draft의 status(draft)가 rejected/submitted를 덮어쓰지 않도록
+          useData=_mergeDraftOverServer(d,draft); // 빈 draft 필드가 서버 기록을 덮지 않도록(전체 스냅샷 clobber 방지)
         }
       }
     }catch(e){}
     fillForm(useData);
+    // 서버 데이터(또는 서버 기반 병합)로 baseline을 채웠다 → 이후 autoSave의 빈 필드는 의도적 삭제로 신뢰 가능.
+    //   즉시복원 fillForm(로컬draft)는 이 지점을 안 지나므로 _serverReconciled가 안 켜진다.
+    //   단 fillForm이 month 불일치(손상 데이터)로 early-return해 폼을 비운 경우엔 켜지 않는다 —
+    //   빈 폼이 full:true로 승격돼 통째병합이 서버를 덮는 것 방지(fillForm 초입 가드와 동일 조건).
+    if(!(useData.month && useData.month!==currentMonth)) _serverReconciled=true;
     // 학생 확인은 이벤트 상점의 [확인] 버튼 클릭으로만 갱신됨 (자동 X)
   });
 }
@@ -1729,6 +1905,8 @@ function fillForm(data){
   const isApproved=data.status==='approved';
   const isSubmitted=data.status==='submitted';
   const isRejected=data.status==='rejected';
+  // 배달 완료 = 친구 가방에 이미 들어갔다 → 되돌릴 수 없으므로 수정/재제출 금지
+  const isDelivered=!!data.record_delivered_at;
   document.getElementById('submittedBanner').classList.toggle('hidden',!(isSubmitted||isApproved));
   document.getElementById('rejectedBanner').classList.toggle('hidden',!isRejected);
   if(isRejected&&data.rejected_reason) document.getElementById('rejectedReason').textContent=data.rejected_reason;
@@ -1756,39 +1934,68 @@ function fillForm(data){
     document.getElementById('saveDraftBtn').disabled=true;
     setFormLocked(true);
   } else {
-    // 승인된 경우만 잠금. 제출됨 상태에서는 수정/재제출 가능 (임시저장 버튼만 비활성)
-    formLocked=isApproved;
-    document.getElementById('submitBtn').disabled=isApproved;
-    document.getElementById('saveDraftBtn').disabled=isApproved||isSubmitted;
-    setFormLocked(isApproved);
+    // 승인 또는 배달 완료면 잠금. 제출됨 상태에서는 수정/재제출 가능 (임시저장 버튼만 비활성)
+    //   배달 후 수정을 허용하면 이미 친구 가방에 들어간 달고나를 되돌릴 수 없는데도
+    //   수신자를 바꿀 수 있어, 보낸 학생 쿠키가 5개 더 빠지거나 변경이 조용히 무시된다.
+    //   record_delivered_at은 배달 시 보낸 학생 기록에 이미 기록되므로 추가 조회가 필요 없다.
+    const _lock=isApproved||isDelivered;
+    formLocked=_lock;
+    document.getElementById('submitBtn').disabled=_lock;
+    document.getElementById('saveDraftBtn').disabled=_lock||isSubmitted;
+    setFormLocked(_lock);
   }
   // 제출 버튼 라벨 상태별 갱신
   const _submitBtn=document.getElementById('submitBtn');
   if(_submitBtn){
-    if(isApproved) _submitBtn.textContent='✅ 승인됨';
+    if(isDelivered) _submitBtn.textContent='📦 배달완료 (수정 불가)';
+    else if(isApproved) _submitBtn.textContent='✅ 승인됨';
     else if(isSubmitted) _submitBtn.textContent='✅ 제출됨';
     else if(isRejected) _submitBtn.textContent='↻ 다시 제출';
     else _submitBtn.textContent='📮 제출하기';
   }
   // 학생이 입력 중이면(승인 등으로 잠긴 경우는 제외) 입력칸 값을 덮어쓰지 않음 — 작성 중 텍스트 유실 방지
   // (배너/잠금 처리는 위에서 이미 끝났고, 여기서는 값 채우기만 건너뜀)
-  if(!_formEditingDirty || isApproved){
-  setGemsFromData('lack',data.lack_names||[]);
-  setGemsFromData('full',data.full_names||[]);
+  //
+  // 단 이 기록의 "첫 채우기"는 _formEditingDirty여도 반드시 해야 한다(_formFilledOnce).
+  //   resetForm이 폼을 빈 채로 편집 가능하게 열기 때문에, 느린 교실 AP에서 리스너가 오기 전(1~3초)에
+  //   학생이 한 글자만 쳐도 _formEditingDirty=true가 서고 → 진짜 기록이 영영 안 채워진다.
+  //   화면은 빈 채로 남고, autoSave가 써둔 "전 필드 빈 draft"가 updated_at만 새로워서
+  //   이후 매 렌더에서 dTs>rTs로 서버를 이기며, 💾 한 번이면 서버의 진짜 기록이 빈 값으로 덮인다.
+  //
+  //   그 "첫 채우기"가 학생 입력을 덮으면 안 되므로, 입력 중(_preserve)일 땐 **resetForm이 비워둔
+  //   기본값 그대로인 칸만** 채운다 — 기본값이 아니면 그건 학생이 넣은 것이다.
+  //   ⚠️ activeElement 한 칸만 지키는 건 틀렸다: 학생이 lackReason을 치고 보석칩을 고른 뒤
+  //   fullReason으로 옮겨가면, 커서가 없는 lackReason과 보석칩이 서버 옛 값으로 조용히 덮인다.
+  const _fillAll=!_formEditingDirty||isApproved;
+  if(_fillAll || !_formFilledOnce){
+  const _preserve=!_fillAll;                       // 입력 중 첫 채우기 → 빈 칸만 채운다
+  const _put=(el,v)=>{ if(el&&!(_preserve&&el.value!=='')) el.value=v||''; };
+  if(!_preserve||lackSelected.size===0) setGemsFromData('lack',data.lack_names||[]);
+  if(!_preserve||fullSelected.size===0) setGemsFromData('full',data.full_names||[]);
   const m={lackReason:'lack_reason',fullReason:'full_reason',growthPlan:'growth_plan',mySecret:'my_secret',teacherMsg:'teacher_msg',defenderReason:'defender_reason',promisingReason:'promising_reason',dalgonaMsg:'dalgona_msg'};
-  Object.entries(m).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=data[key]||'';});
-  document.getElementById('defenderSelect').value=data.defender_to||'';
-  document.getElementById('promisingSelect').value=data.promising_to||'';
-  document.getElementById('dalgonaTo').value=data.dalgona_to||'';
-  if(data.dalgona_gift) selectGift(data.dalgona_gift,document.querySelector(`[data-gift="${data.dalgona_gift}"]`));
-  const _gh=document.getElementById('giftHeartText'); if(_gh) _gh.value=data.dalgona_heart||'';
-  const _ge=document.getElementById('giftEtcText'); if(_ge) _ge.value=data.dalgona_etc||'';
+  Object.entries(m).forEach(([id,key])=>_put(document.getElementById(id),data[key]));
+  _put(document.getElementById('defenderSelect'),data.defender_to);
+  _put(document.getElementById('promisingSelect'),data.promising_to);
+  _put(document.getElementById('dalgonaTo'),data.dalgona_to);
+  if(data.dalgona_gift&&(!_preserve||!_giftUserPicked)) selectGift(data.dalgona_gift,document.querySelector(`[data-gift="${data.dalgona_gift}"]`),true);
+  _put(document.getElementById('giftHeartText'),data.dalgona_heart);
+  _put(document.getElementById('giftEtcText'),data.dalgona_etc);
+  _formFilledOnce=true;
   }
   // 캔버스 복원: 우선순위 ClassData/EventShop/drawings/student_{cd}_{month} > records.dalgona_drawing(레거시) > localStorage 백업
   if(me){
-    const drawingId='student_'+me.cd+'_'+currentMonth;
+    // 신원 캡처. 아래 once('value')는 취소할 수 없고(detachMyRecordListener는 on('value')만 뗀다)
+    //   왕복 중 학생이 월 탭을 누르면 콜백이 바뀐 me.cd/currentMonth를 읽는다.
+    //   경로가 둘로 갈린다: 캔버스에 그리는 restoreNow는 월이 바뀌면 중단해야 하고(캔버스는 현재 월을
+    //   보여주는 단일 요소 — 6월 그림을 7월 캔버스에 그리면 획 하나에 7월 키로 확정된다),
+    //   업로드/서버 쓰기는 캡처한 옛 월로 그대로 진행해야 한다(saveRecord와 같은 이유).
+    const _fcd=me.cd, _fmo=currentMonth;
+    const _sameCtx=()=>!!me&&me.cd===_fcd&&currentMonth===_fmo;
+    const drawingId='student_'+_fcd+'_'+_fmo;
     const restoreNow=src=>{
       if(!src) return;
+      if(!_sameCtx()) return; // 월/학생이 바뀐 뒤 늦게 도착 — 다른 달 캔버스에 그리면 안 된다
+      if(_canvasSuppressRestore) return; // 방금 🗑로 지움 — 지운 그림이 되살아나지 않도록
       if(!canvas){ _pendingCanvasData=src; return; }
       if(isRejected||!_canvasUserDirty||isCanvasBlank()){
         loadCanvasFromData(src);
@@ -1799,26 +2006,34 @@ function fillForm(data){
     // 이유: localStorage는 매 획마다 갱신되지만 remote는 3초 debounce로 지연 또는 CDN 캐시로 옛 URL을 가리킬 수 있음
     let restoredFromLocal=false;
     try{
-      const local=localStorage.getItem('sw_canvas_'+me.cd+'_'+currentMonth);
+      const local=localStorage.getItem('sw_canvas_'+_fcd+'_'+_fmo);
       if(local){ restoreNow(local); restoredFromLocal=true; }
     }catch(e){}
     firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).once('value').then(snap=>{
       const remote=snap.val();
       if(remote){
         if(!restoredFromLocal) restoreNow(remote);
+        // 제출/승인된 월은 원격(원본 PNG)이 정본 → 로컬 저해상 백업 위에 덮어써 화질 복원.
+        //  (공용 태블릿에서 다른 기기 제출본을 저해상 로컬이 가리는 문제 방지. restoreNow가 _canvasUserDirty면 스킵하므로 작업 중이면 유지)
+        else if(isSubmitted || isApproved) restoreNow(remote);
         return;
       }
       // 레거시 records.dalgona_drawing → Cloudinary 마이그레이션
       if(data.dalgona_drawing){
         syncDrawing(drawingId,data.dalgona_drawing).catch(()=>{});
-        saengRef.child('records/'+currentMonth+'/'+me.cd).update({dalgona_drawing:null,dalgona_drawing_id:drawingId}).catch(()=>{});
+        saengRef.child('records/'+_fmo+'/'+_fcd).update({dalgona_drawing:null,dalgona_drawing_id:drawingId}).catch(()=>{});
         if(!restoredFromLocal) restoreNow(data.dalgona_drawing);
         return;
       }
-      // remote 없으면 로컬 본을 Cloudinary로 업로드해서 동기화
+      // remote 없으면 로컬 본을 Cloudinary로 업로드해서 동기화.
+      //   단 저장/제출이 진행 중이거나 아직 안 올라간 편집분이 있으면 건너뛴다 —
+      //   여기서 올리는 건 축소 JPEG 백업이라, 곧 올라갈 원본 PNG를 저해상으로 덮을 수 있다.
       try{
-        const local=localStorage.getItem('sw_canvas_'+me.cd+'_'+currentMonth);
-        if(local) syncDrawing(drawingId,local).catch(()=>{});
+        // 백필은 캡처한 월의 백업만 올린다. me.cd/currentMonth를 여기서 읽으면 전환 후 도착 시
+        //   7월 백업을 student_{cd}_2026-06으로 올려 6월 그림을 7월 그림으로 덮어버린다.
+        //   _canvasEditSeq 가드는 resetForm이 둘 다 0으로 되돌리므로 전환 직후엔 항상 통과한다.
+        const local=localStorage.getItem('sw_canvas_'+_fcd+'_'+_fmo);
+        if(local&&!_savingDraft&&!_submitting&&_canvasEditSeq===_canvasUploadedSeq) syncDrawing(drawingId,local).catch(()=>{});
       }catch(e){}
     }).catch(()=>{});
   }
@@ -1868,39 +2083,156 @@ function confirmRejectionNotice(){
 }
 
 // ═══ 저장/제출 ═══
+// Firebase 쓰기는 오프라인이면 resolve도 reject도 하지 않고 메모리 큐에만 머문다(탭이 닫히면 소실).
+//   그래서 await만으론 영원히 안 끝난다. 타임아웃은 UI 신호용일 뿐 — race가 reject해도 원래 쓰기는
+//   살아있어 재연결 시 반영된다. 취소가 아니라 "기다리기를 그만둔다"는 뜻.
+function _withTimeout(p,ms){
+  return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),ms||15000))]);
+}
+let _savingDraft=false;
+// 이 세션에서 제출 쓰기를 **발행한** (cd_month). 타임아웃이어도 들어간다 — RTDB 쓰기는 취소되지 않고
+//   큐에 남아 재연결 시 반영되기 때문이다. 그 뒤의 임시저장이 status:'draft'를 쓰면 큐 순서가
+//   [submitted][draft]가 돼 최종 상태가 draft로 풀린다. 배너 가드만으론 못 막는다 —
+//   배너는 리스너가 띄우는데 오프라인이면 리스너도 안 오기 때문이다(정확히 그 구간에서 터진다).
+const _submitIssued=new Set();
 async function saveRecord(status='draft'){
   const data=collectFormData(status);
   delete data.dalgona_drawing;
   // 임시저장: localStorage + Firebase (.update, 동일 타임스탬프로 echo 안전)
   // dTs===rTs 보장 → 리스너 병합 조건(dTs>rTs) 불충족 → 입력 덮어쓰기 없음
   if(status==='draft'){
-    const _draftTs=Date.now();
-    const _draftData={...data,updated_at:_draftTs};
-    localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify(_draftData));
-    saengRef.child('records/'+currentMonth+'/'+me.cd).update(_draftData).catch(()=>{});
-    toast('💾 임시저장 완료!');
+    if(_savingDraft) return; // 연타/타이머 중복 진입 방지 — 그림 업로드가 겹치지 않도록
+    _savingDraft=true;
+    const _btn=document.getElementById('saveDraftBtn');
+    const _btnWasDisabled=_btn?_btn.disabled:true; // 제출된 학생은 원래 비활성 → 건드리지 않는다
+    const _btnTxt=_btn?_btn.textContent:'';
+    if(_btn&&!_btnWasDisabled){_btn.disabled=true;_btn.textContent='💾 저장 중…';}
+    // 로컬 저장 성공 여부를 안내에 반영해야 한다. 이 태블릿들은 부모 앱과 origin을 공유해
+    //   쿼터 초과로 setItem이 실패할 수 있는데(문서화된 실전 사고), 그걸 무시하고
+    //   "이 태블릿에만 저장됨"이라고 하면 아무 데도 저장 안 된 상태를 저장됐다고 속이게 된다.
+    let _lsOk=false;
+    // 신원을 진입 시점에 붙잡는다. 아래 syncDrawing의 await는 교실 AP에서 수 초가 걸리고,
+    //   그동안 월 탭과 로그아웃 버튼은 살아 있다(setFormLocked는 입력칸만 잠근다).
+    //   me.cd/currentMonth를 await 뒤에 다시 읽으면 6월 내용이 7월 노드에, A의 글이 B의 노드에 써진다.
+    const _cd=me.cd, _mo=currentMonth;
+    try{
+      const _draftTs=Date.now();
+      const _draftData={...data,updated_at:_draftTs}; // full은 서버로 새면 안 됨 → 아래 localStorage 쓰기에만 붙인다
+      // 제출/승인/반려 상태 UI가 표시 중이면 status를 덮어쓰지 않음 (autoSave와 동일 가드).
+      //   없으면 타이머 만료 자동 임시저장(startTimerClient)이 서버 status를 submitted/rejected→draft로
+      //   되돌려 반 전체의 제출이 일제히 풀리거나 반려가 사라진다. formLocked는 approved만 막는다.
+      //   rejectedBanner도 봐야 한다 — 반려 확인 후엔 submittedBanner가 숨겨져 있다.
+      const _sb=document.getElementById('submittedBanner');
+      const _rb=document.getElementById('rejectedBanner');
+      const _shown=el=>el&&!el.classList.contains('hidden');
+      if(_shown(_sb)||_shown(_rb)||_submitIssued.has(_cd+'_'+_mo)) delete _draftData.status;
+      // 로컬을 항상 먼저 확정 — 그림 업로드/서버 쓰기가 실패해도 작성 내용은 이 태블릿에 남는다.
+      try{localStorage.setItem('sw_draft_'+_cd+'_'+_mo,JSON.stringify({..._draftData,full:true}));_lsOk=true;}catch(e){} // 💾 = 완전한 의도 → 로컬 draft에만 full:true(삭제 보존용)
+      // 그림도 임시저장 시 업로드. 마지막 업로드 이후 편집이 없으면 건너뛴다 —
+      //   불필요한 업로드를 막고, 로컬 백업(축소 JPEG)에서 복원만 한 캔버스를 그대로 올려
+      //   원격 원본 PNG를 저해상으로 덮는 화질 저하도 막는다.
+      let _drawOk=true;
+      if(_canvasEditSeq!==_canvasUploadedSeq&&!isCanvasBlank()){
+        // 스냅샷 시점의 편집 번호를 기록한다. await 동안 학생이 계속 그리면 _canvasEditSeq가 더 올라가고,
+        //   그 획들은 업로드본에 없다. 불리언 플래그였을 땐 여기서 무조건 꺼버려 그 획들이
+        //   "이미 업로드됨"으로 취급돼 다음 저장에서 영영 건너뛰어졌다.
+        const _at=_canvasEditSeq;
+        const _u=await syncDrawing('student_'+_cd+'_'+_mo,getCanvasData());
+        if(_u) _canvasUploadedSeq=_at; else _drawOk=false;
+      }
+      // 여기서 "월이 바뀌었으면 포기"하면 안 된다 — _mo/_cd로 쓰므로 6월 내용은 6월 노드에
+      //   정확히 들어간다. 포기하면 오히려 그 편집분이 로컬에만 남아 서버에 안 올라간다.
+      let _svOk=true;
+      try{ await _withTimeout(saengRef.child('records/'+_mo+'/'+_cd).update(_draftData),15000); }
+      catch(e){ _svOk=false; }
+      if(_svOk&&_drawOk) toast('💾 임시저장 완료!');
+      else if(!_svOk&&!_lsOk) toast('⚠️ 저장 실패! 인터넷 확인 후 다시 눌러주세요');
+      else if(!_svOk) toast('⚠️ 이 태블릿에만 저장됨 (인터넷 확인)');
+      else toast('⚠️ 글은 저장됐지만 그림 전송 실패 (인터넷 확인)');
+    } catch(e){
+      // 예상 못 한 실패(예: CORS로 캔버스가 tainted면 getCanvasData의 toDataURL이 throw).
+      //   위에서 로컬 저장은 이미 끝냈으므로 작성 내용은 안전 — 서버 반영만 실패했다고 알린다.
+      //   catch가 없으면 onclick 경로에서 unhandled rejection이 되고 학생은 아무 안내도 못 받는다.
+      console.error('[saveRecord draft] 실패', e);
+      toast(_lsOk?'⚠️ 이 태블릿에만 저장됨 (인터넷 확인)':'⚠️ 저장 실패! 인터넷 확인 후 다시 눌러주세요');
+    } finally {
+      _savingDraft=false;
+      // 저장 대기 중 교사가 승인하면 fillForm이 이 버튼을 비활성으로 바꿔놨을 수 있다.
+      //   무조건 disabled=false로 되돌리면 승인된 학생에게 임시저장 버튼이 다시 열린다 → 현재 상태로 재계산.
+      if(_btn&&!_btnWasDisabled){
+        _btn.textContent=_btnTxt||'💾 임시저장';
+        const _sbNow=document.getElementById('submittedBanner');
+        _btn.disabled=!!(formLocked||(_sbNow&&!_sbNow.classList.contains('hidden')));
+      }
+    }
     return;
   }
   // 제출: 그림 업로드 후 Firebase에 저장
+  // 신원을 진입 시점에 붙잡는다 — draft 경로(위)와 정확히 같은 이유다. syncDrawing의 await는
+  //   교실 AP에서 수 초가 걸리고 그동안 월 탭과 로그아웃 버튼은 살아 있다(setFormLocked는 입력칸만 잠근다).
+  //   await 뒤에 me.cd/currentMonth를 다시 읽으면 6월 내용이 7월 노드에 submitted로 써지고
+  //   6월은 영영 미제출로 남으며, 7월의 로컬 캔버스 백업이 지워지고, 로그아웃했다면 me가 null이라 throw한다.
+  const _cd=me.cd, _mo=currentMonth, _nm=me.nm;
   data.submitted_at=Date.now();
   const _blank=isCanvasBlank();
   console.log('[saveRecord] status=', status, 'isCanvasBlank=', _blank);
   if(!_blank){
-    const drawingId='student_'+me.cd+'_'+currentMonth;
-    const _cd=getCanvasData();
-    console.log('[saveRecord] syncDrawing 호출', {drawingId, dataLen:_cd?_cd.length:0});
-    const _url=await syncDrawing(drawingId,_cd);
+    const drawingId='student_'+_cd+'_'+_mo;
+    // await 전 편집 번호 스냅샷 — draft 경로와 동일 이유. await 뒤에 _canvasEditSeq를 그대로
+    //   대입하면 업로드 도중 그린 획이 "업로드됨"으로 표시돼 이후 임시저장이 재업로드를 영영 건너뛴다.
+    const _at=_canvasEditSeq;
+    const _png=getCanvasData();
+    console.log('[saveRecord] syncDrawing 호출', {drawingId, dataLen:_png?_png.length:0});
+    const _url=await syncDrawing(drawingId,_png);
     console.log('[saveRecord] syncDrawing 반환', {drawingId, url:_url});
+    // 업로드 실패 시 제출 중단. 예전엔 _url이 빈값이어도 그대로 submitted로 기록해
+    //   학생은 "제출 완료"를 보고 끝내고 교사는 빈 달고나를 보게 됐다.
+    //   로컬 백업(sw_canvas_*)은 아래 removeItem 전에 중단되므로 그대로 보존된다.
+    if(!_url) throw new Error('drawing upload failed');
+    _canvasUploadedSeq=_at; // 업로드된 스냅샷 시점까지만 "원격과 일치"로 인정
     data.dalgona_drawing_id=drawingId;
+    // 서버(Cloudinary+Firebase drawings)에 원본 PNG가 확정 저장됐을 때만 로컬 크래시 백업 삭제.
+    //  백업은 저해상 JPEG라 남겨두면 재접속 시 저해상본이 고해상 원격을 가리거나 재제출로 덮을 수 있음.
+    //  업로드 실패(_url 빈값)면 백업 유지 → 복구 가능.
+    //  ⚠️ _canvasEditSeq===_at 확인 필수 — 업로드(수십 초) 도중 캔버스는 잠기지 않으므로(setFormLocked는
+    //     textarea/input/select만 잠근다) 그 사이 그린 새 획이 백업에 들어간다. 그 백업을 지우면 새 획이
+    //     원격에도(스냅샷 이후라 미업로드) 로컬에도 없어져, 이후 크래시 시 영구 소실된다.
+    //  ⚠️ _drawingSaved 확인 필수 — Cloudinary는 성공(_url truthy)했어도 RTDB 포인터 write가 타임아웃해
+    //     큐에만 남았으면(저품질 인터넷: HTTP는 살아있고 RTDB 소켓만 끊긴 경우) 서버 미확정이다.
+    //     이때 백업을 지우고 재연결 전 태블릿이 죽으면 포인터·백업 둘 다 없어져 그림이 영구 소실된다.
+    //     durable(서버 확정) 때만 삭제 — 미확정이면 백업 유지→재연결 시 원격 원본이 복원, 죽어도 백업 생존.
+    if(_url && _canvasEditSeq===_at && _drawingSaved.get(drawingId)){ try{ localStorage.removeItem('sw_canvas_'+_cd+'_'+_mo); }catch(e){} }
   } else {
     console.warn('[saveRecord] 캔버스가 비어 있다고 판단됨 → 업로드 스킵');
   }
-  await saengRef.child('records/'+currentMonth+'/'+me.cd).update({...data,updated_at:Date.now()});
+  // 타임아웃 필수 — RTDB write는 오프라인이면 resolve도 reject도 하지 않고 메모리 큐에 머문다.
+  //   생 await면 영원히 안 끝나고, 그러면 doFinalSubmit의 finally도 안 돌아 `_submitting`이 true로
+  //   박제돼 "📮 제출 중…" 버튼이 그 세션 내내 잠긴다(재시도조차 못 함).
+  //   그림이 있으면 syncDrawing의 fetch 타임아웃이 먼저 걸리지만, 그림 없이 제출하거나
+  //   Cloudinary만 살아있고 RTDB 소켓만 끊긴 경우 정확히 여기서 멈춘다.
+  //   타임아웃은 취소가 아니다 — 큐에 남은 쓰기는 재연결 시 반영되고, 재제출은 멱등하다.
+  // 발행 사실을 await 앞에 기록한다 — 타임아웃이어도 이 쓰기는 살아있으므로,
+  //   이후 임시저장이 status:'draft'로 제출을 풀어버리지 않도록 막아야 한다.
+  _submitIssued.add(_cd+'_'+_mo);
+  try{ await _withTimeout(saengRef.child('records/'+_mo+'/'+_cd).update({...data,updated_at:Date.now()}),15000); }
+  catch(e){ throw new Error('submit record write timeout'); } // → doFinalSubmit이 "다시 제출해주세요" 안내
   _formEditingDirty=false;
   _rejectionConfirmed=false; // 재제출 후 다음 반려도 알림창이 뜨도록
-  try{if(me) localStorage.removeItem('sw_rejConfirmed_'+me.cd+'_'+currentMonth);}catch(e){}
-  localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...data,updated_at:Date.now()}));
-  await saveNominationsAndDalgona(data);
+  try{ localStorage.removeItem('sw_rejConfirmed_'+_cd+'_'+_mo); }catch(e){}
+  // 학생 경로에서 유일하게 try가 없던 setItem이었다. 쿼터가 꽉 차면 여기서 throw해
+  //   레코드는 이미 submitted인데 방어자/유망주/달고나가 안 써지고, doFinalSubmit의 catch가
+  //   "제출하지 못했어요"라는 거짓 안내를 띄웠다. 로컬 캐시 실패가 제출을 끊으면 안 된다.
+  try{ localStorage.setItem('sw_draft_'+_cd+'_'+_mo,JSON.stringify({...data,updated_at:Date.now(),full:true})); }catch(e){ console.warn('[submit] 로컬 draft 저장 실패(무시)',e); }
+  // 추천/달고나는 레코드에서 파생되는 데이터다 — 없으면 교사의 승인(개별/일괄)과 발송 직전 루프가
+  //   ensureNominationsAndDalgonaForRecord로 레코드에서 다시 만들고 autoApproveRelated로 승격까지 한다.
+  //   그러니 여기서 실패해도 제출 자체를 실패로 되돌리면 안 된다(레코드가 정본이고 이미 써졌다).
+  //   타임아웃 필수: _setKeepDelivered의 once()는 오프라인에서 끝나지 않는다.
+  try{ await _withTimeout(saveNominationsAndDalgona(data,_cd,_mo,_nm),15000); }
+  catch(e){ console.warn('[submit] 추천/달고나 기록 실패 — 레코드는 제출됨(승인/발송 시 자동 생성)',e); }
+  // 서버 쓰기는 캡처한 신원으로 끝냈다. 화면 갱신은 지금 보고 있는 달이 그 달일 때만 —
+  //   업로드 중 7월로 옮겨간 학생에게 7월 "제출 완료" 배너를 띄우면 안 된다.
+  //   (그 달의 배너는 리스너가 fillForm으로 다시 그린다.)
+  if(!me||me.cd!==_cd||currentMonth!==_mo) return;
   document.getElementById('submittedBanner').classList.remove('hidden');
   document.getElementById('rejectedBanner').classList.add('hidden');
   document.getElementById('submitBtn').disabled=false;
@@ -1909,17 +2241,34 @@ async function saveRecord(status='draft'){
   toast('📮 제출 완료!');
 }
 
-async function saveNominationsAndDalgona(data){
+// 재제출 시 delivered/delivered_at을 보존하며 set한다.
+//   통째 .set()으로 덮으면 이미 배달된 항목의 delivered가 사라져 "미발송"으로 되살아난다.
+//   그 상태로 재발송하면 수라상이 또 지급되고, 특히 수신자를 바꿨다면 보낸 학생의 쿠키가 5개 더 빠진다
+//   (_doDeliveryInner의 dedup은 "수신자 가방의 이벤트"로 판정하므로 수신자가 바뀌면 못 잡는다).
+async function _setKeepDelivered(path,obj){
+  let prev={};
+  try{ prev=(await saengRef.child(path).once('value')).val()||{}; }catch(e){}
+  const keep={};
+  if(prev.delivered){
+    keep.delivered=prev.delivered;
+    if(prev.delivered_at!=null) keep.delivered_at=prev.delivered_at; // undefined는 RTDB write 시 예외
+  }
+  await saengRef.child(path).set({...obj,...keep});
+}
+// 신원(_cd/_mo/_nm)은 호출자가 await 앞에서 캡처한 값을 넘긴다 — 여기서 me/currentMonth를 읽으면
+//   그림 업로드 대기 중 월을 바꾼 학생의 추천이 엉뚱한 달에 만들어진다. 인자가 없으면 현재값으로 폴백.
+async function saveNominationsAndDalgona(data,_cd,_mo,_nm){
+  const cd=_cd!==undefined?_cd:(me&&me.cd), mo=_mo!==undefined?_mo:currentMonth, nm=_nm!==undefined?_nm:(me&&me.nm);
   const defTo=data.defender_to,proTo=data.promising_to,dalTo=data.dalgona_to;
   if(defTo){
-    await saengRef.child('nominations/'+currentMonth+'_'+me.cd+'_defender').set({type:'defender',from:me.cd,from_name:me.nm,to:defTo,to_name:getStudentName(defTo),reason:data.defender_reason,status:'pending',month:currentMonth,created_at:Date.now()});
+    await _setKeepDelivered('nominations/'+mo+'_'+cd+'_defender',{type:'defender',from:cd,from_name:nm,to:defTo,to_name:getStudentName(defTo),reason:data.defender_reason,status:'pending',month:mo,created_at:Date.now()});
   }
   if(proTo){
-    await saengRef.child('nominations/'+currentMonth+'_'+me.cd+'_promising').set({type:'promising',from:me.cd,from_name:me.nm,to:proTo,to_name:getStudentName(proTo),reason:data.promising_reason,status:'pending',month:currentMonth,created_at:Date.now()});
+    await _setKeepDelivered('nominations/'+mo+'_'+cd+'_promising',{type:'promising',from:cd,from_name:nm,to:proTo,to_name:getStudentName(proTo),reason:data.promising_reason,status:'pending',month:mo,created_at:Date.now()});
   }
   if(dalTo){
-    const drawingId='student_'+me.cd+'_'+currentMonth;
-    await saengRef.child('dalgona/'+currentMonth+'_'+me.cd+'_dalgona').set({from:me.cd,from_name:me.nm,to:dalTo,to_name:getStudentName(dalTo),message:data.dalgona_msg,gift:data.dalgona_gift,gift_heart:data.dalgona_heart,gift_etc:data.dalgona_etc,drawingRef:drawingId,status:'pending',month:currentMonth,created_at:Date.now()});
+    const drawingId='student_'+cd+'_'+mo;
+    await _setKeepDelivered('dalgona/'+mo+'_'+cd+'_dalgona',{from:cd,from_name:nm,to:dalTo,to_name:getStudentName(dalTo),message:data.dalgona_msg,gift:data.dalgona_gift,gift_heart:data.dalgona_heart,gift_etc:data.dalgona_etc,drawingRef:drawingId,status:'pending',month:mo,created_at:Date.now()});
   }
 }
 
@@ -2035,10 +2384,19 @@ async function submitRecord(){
   // 달고나 간식(쿠키 5개) 잔액 확인
   if(dalSel && currentGift==='cookie' && me){
     try {
-      const stuSnap = await shopRef.child('stu').once('value');
-      let stuArr = stuSnap.val()||[];
-      if(!Array.isArray(stuArr)) stuArr = Object.values(stuArr);
-      const myStu = stuArr.find(s=>s && String(s.cd).trim()===String(me.cd).trim());
+      // 본인 노드만 읽는다. 예전엔 stu 전체 노드(전교생 inv, 월마다 누적)를 받아 본인 것 하나를
+      //   골라 썼다 — 마감 직전 30명이 동시에 제출하면 부팅 때와 맞먹는 다운로드가 한 번 더 몰렸고,
+      //   검증에 걸려 다시 누를 때마다 또 받았다. 필요한 건 필드 3개뿐이다.
+      const _k=_shopKeyByCd[String(me.cd).trim()];
+      let myStu=null;
+      if(_k!==undefined){
+        myStu=(await shopRef.child('stu/'+_k).once('value')).val();
+      } else {
+        // 매핑 미확보(부팅 스냅샷 이후 추가된 학생 등) → 옛 경로로 폴백
+        let stuArr=(await shopRef.child('stu').once('value')).val()||[];
+        if(!Array.isArray(stuArr)) stuArr=Object.values(stuArr);
+        myStu=stuArr.find(s=>s && String(s.cd).trim()===String(me.cd).trim());
+      }
       if(myStu){
         const avail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
         if(avail < 5){
@@ -2057,9 +2415,42 @@ function showSubmitConfirmModal(){
 function closeSubmitConfirmModal(){
   document.getElementById('submitConfirmModal').classList.add('hidden');
 }
+let _submitting=false;
 async function doFinalSubmit(){
+  // 재진입 가드: 느린 회선에서 화면이 멈춘 듯 보여 학생이 제출을 연타하면
+  //   Cloudinary 업로드와 records update가 중복 실행됐다.
+  if(_submitting) return;
+  _submitting=true;
   closeSubmitConfirmModal();
-  await saveRecord('submitted');
+  const sb=document.getElementById('submitBtn');
+  const prevTxt=sb?sb.textContent:'';
+  if(sb){sb.disabled=true;sb.textContent='📮 제출 중…';}
+  try{
+    // 백스톱: fillForm의 잠금은 리스너가 늦으면 뚫린다. 배달 여부는 돈이 걸린 문제라
+    //   제출 직전에 서버 진실을 다시 확인한다(스칼라 1개 읽기).
+    //   타임아웃 필수: 오프라인이면 once가 안 끝나 제출 버튼이 비활성인 채 영영 멈춘다.
+    //   확인 못 하면 통과시킨다(fail-open) — fillForm의 잠금이 이미 정상 경로를 막고 있고,
+    //   delivered 보존 덕에 재발송 이중차감도 안 나므로, 여기서 막으면 정상 제출만 방해한다.
+    let _dl=null;
+    try{ _dl=(await _withTimeout(saengRef.child('records/'+currentMonth+'/'+me.cd+'/record_delivered_at').once('value'),5000)).val(); }
+    catch(e){ console.warn('[submit] 배달여부 확인 실패 — 진행', e); }
+    if(_dl){
+      showSubmitErrorModal(['📦 이미 친구에게 배달이 완료된 기록이에요.\n배달된 뒤에는 수정하거나 다시 제출할 수 없어요.']);
+      if(sb){sb.disabled=true;sb.textContent='📦 배달완료 (수정 불가)';}
+      return;
+    }
+    // 제출한 달/학생을 붙잡아 둔다 — saveRecord는 업로드 대기 중 월이 바뀌면 배너/토스트를
+    //   건드리지 않고 빠지지만(신원캡처), 여기서 라벨을 무조건 찍으면 그 방어가 무의미해진다.
+    //   submitBtn은 월마다 있는 게 아니라 하나뿐이라, 미제출인 새 달 버튼에 '✅ 제출됨'이 남아
+    //   학생이 이미 낸 줄 오인한다.
+    const _sCd=me&&me.cd, _sMo=currentMonth;
+    await saveRecord('submitted');
+    if(sb&&me&&me.cd===_sCd&&currentMonth===_sMo) sb.textContent='✅ 제출됨';
+  }catch(e){
+    console.error('[submit] 실패', e);
+    showSubmitErrorModal(['⚠️ 제출하지 못했어요. 인터넷 연결을 확인하고 다시 제출해주세요.\n작성한 내용과 그림은 이 태블릿에 저장되어 있으니 사라지지 않아요.']);
+    if(sb){sb.disabled=false;sb.textContent=prevTxt||'📮 제출하기';}
+  }finally{ _submitting=false; }
 }
 
 function getStudentName(cd){
@@ -2069,20 +2460,100 @@ function getStudentName(cd){
 
 // ═══ 캔버스 ═══
 let canvas,ctx,drawing=false,erasing=false,brushColor='#333',_canvasUserDirty=false,_pendingCanvasData=null;
+// 🗑로 지운 뒤 이 세션 동안 로컬/원격 그림 복원을 억제(clearCanvas 참고). 새 기록 로드(resetForm) 시 해제.
+let _canvasSuppressRestore=false;
 let _canvasHistory=[],_canvasHistIdx=-1;
 function saveCanvasState(){
   _canvasHistory=_canvasHistory.slice(0,_canvasHistIdx+1);
   _canvasHistory.push(canvas.toDataURL());
-  if(_canvasHistory.length>40){_canvasHistory.shift();}
+  if(_canvasHistory.length>15){_canvasHistory.shift();} // 40→15: 대형(1040×780) 캔버스 toDataURL 누적 메모리 절감(태블릿 튕김 방지)
   _canvasHistIdx=_canvasHistory.length-1;
 }
-function restoreCanvasState(url){
+// ── 캔버스 로컬 백업: 디바운스 + 쿼터 복원력 ──
+//   과거: 매 획마다 getCanvasData(toDataURL)+localStorage.setItem → 대형 캔버스라 CPU/메모리/쿼터 폭증 →
+//   태블릿 탭 튕김 + 쿼터초과 시 setItem 조용히 실패로 복원 불가(그림 유실). 디바운스+쿼터정리+이탈flush로 해결.
+let _canvasSaveTimer=null;
+let _canvasDraftBaseTs=0, _canvasEditedSinceSync=false; // 다중탭: 편집 안 한 stale 탭이 최신 백업 덮는 것 방지
+// 그림 편집 번호 / 마지막으로 업로드에 성공한 편집 번호. (_canvasEditedSinceSync는 로컬 백업 시
+//   소비되므로 업로드 추적에 못 쓴다.) 불리언이 아니라 카운터인 이유: 업로드 await 동안 그린 획을
+//   "업로드됨"으로 잘못 표시하지 않기 위해 — 스냅샷 시점 번호만 업로드된 것으로 인정한다.
+//   0에서 시작하는 게 중요: 로컬 백업(축소 JPEG)에서 복원만 한 캔버스를 임시저장이 그대로 올리면
+//   원격 원본 PNG를 저해상으로 덮는다.
+let _canvasEditSeq=0, _canvasUploadedSeq=0;
+let _canvasBackupWarned=false; // 쿼터초과 안내 1회 제한(4초 인터벌 스팸 방지)
+function _scheduleCanvasSave(){ if(!me) return; if(_canvasSaveTimer) clearTimeout(_canvasSaveTimer); _canvasSaveTimer=setTimeout(_writeCanvasDraft,700); }
+function _flushCanvasSave(){ if(_canvasSaveTimer){ clearTimeout(_canvasSaveTimer); _canvasSaveTimer=null; _writeCanvasDraft(); } }
+// 크래시 복구용 로컬 백업 인코더: 축소(≤800px)+JPEG로 용량 최소화.
+//   과거: 원본 1040×780 PNG(수백 KB) → 부모 앱과 origin 공유하는 저사양 태블릿에서 쌓이면
+//   쿼터 초과로 setItem 실패("그림 날아감"). 복구는 화면표시/이어그리기 용도라 축소본으로 충분하며,
+//   복원(loadCanvasFromData)이 캔버스 크기로 자동 확대함. 제출용 원본은 saveRecord의 getCanvasData(PNG)가 별도 처리.
+function _getCanvasBackupData(){
+  const MAXW=800, scale=Math.min(1, MAXW/canvas.width);
+  const w=Math.max(1,Math.round(canvas.width*scale)), h=Math.max(1,Math.round(canvas.height*scale));
+  const t=document.createElement('canvas'); t.width=w; t.height=h;
+  const tc=t.getContext('2d'); tc.fillStyle='white'; tc.fillRect(0,0,w,h); tc.drawImage(canvas,0,0,w,h);
+  return t.toDataURL('image/jpeg',0.85);
+}
+function _writeCanvasDraft(){
+  if(!me||!canvas) return;
+  const key='sw_canvas_'+me.cd+'_'+currentMonth;
+  const tsKey='sw_canvasTs_'+me.cd+'_'+currentMonth;
+  let data;
+  try{
+    if(isCanvasBlank()){
+      // 학생이 직접 지워서 빈 것(지우개로 전부 지움)이면, 백업이 사라진 뒤 fillForm의 restoreNow가
+      //   isCanvasBlank() 가드를 통과해 원격 그림을 다시 그려버린다(clearCanvas와 같은 버그, 다른 경로).
+      //   의도적으로 비운 것이므로 이 세션의 복원을 막는다.
+      if(_canvasUserDirty) _canvasSuppressRestore=true;
+      try{ localStorage.removeItem(key); localStorage.removeItem(tsKey); }catch(_){} return;
+    } // 빈 그림은 저장 안 함(+빈 항목 제거로 용량 절약)
+    data=_getCanvasBackupData();
+  }catch(e){ return; }
+  // 다중탭 가드: 이 탭이 편집한 게 없는데 저장본 ts가 더 최신이면 덮어쓰지 않음(stale 탭 클로버 방지).
+  if(!_canvasEditedSinceSync){
+    try{ const _st=parseInt(localStorage.getItem(tsKey)||'0',10); if(_st > _canvasDraftBaseTs) return; }catch(_){}
+  }
+  const _ts=Date.now();
+  try{ localStorage.setItem(key,data); localStorage.setItem(tsKey,String(_ts)); _canvasDraftBaseTs=_ts; _canvasEditedSinceSync=false; _canvasBackupWarned=false; }
+  catch(e){
+    // 쿼터 초과 — 다른(오래된) 캔버스 백업 + 고아 ts 키 정리 후 1회 재시도
+    try{ for(let i=localStorage.length-1;i>=0;i--){ const kk=localStorage.key(i); if(kk && (kk.indexOf('sw_canvas_')===0||kk.indexOf('sw_canvasTs_')===0) && kk!==key && kk!==tsKey) localStorage.removeItem(kk); } localStorage.setItem(key,data); localStorage.setItem(tsKey,String(_ts)); _canvasDraftBaseTs=_ts; _canvasEditedSinceSync=false; _canvasBackupWarned=false; }
+    catch(e2){
+      // 정리 후에도 실패 — 이 태블릿엔 그림 크래시 백업이 없다. 글 경로("이 태블릿에만 저장됨")와 달리
+      //   그림은 여태 무음이었다. 저메모리 강제종료 시 소실되므로 학생에게 1회 안내(4초 인터벌 스팸 방지).
+      if(!_canvasBackupWarned){ _canvasBackupWarned=true; try{ toast('⚠️ 저장공간이 가득 차 그림 백업이 안 돼요 — 완성하면 바로 제출하세요'); }catch(_){} }
+    }
+  }
+}
+window.addEventListener('pagehide', _flushCanvasSave);
+window.addEventListener('beforeunload', _flushCanvasSave);
+document.addEventListener('visibilitychange', function(){ if(document.hidden) _flushCanvasSave(); });
+// 한 획을 오래 긋는 도중 튕기면 그 획이 유실됨(백업은 획 끝에만 예약). 획은 캔버스에 실시간 반영되므로
+//   그리는 중에는 주기적으로 로컬 백업해 mid-stroke 크래시에 대비.
+setInterval(function(){ if(drawing && me && canvas) _writeCanvasDraft(); }, 4000);
+// 되돌리기/다시하기 복원.
+//   저사양 태블릿에서 대형 PNG 디코딩이 수백 ms 걸려, 그 사이 학생이 새 획을 그으면
+//   뒤늦은 onload가 fillRect로 그 획을 지우고 옛 스냅샷을 덮어씀 → 다음 end()가 지워진 상태를
+//   히스토리+백업에 확정 저장해 redo로도 복구 불가. 세대 토큰으로 늦은 복원을 폐기한다.
+let _restoreGen=0;
+function restoreCanvasState(url,persist){
   const img=new Image();
-  img.onload=()=>{ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};
+  const gen=++_restoreGen;
+  img.onload=()=>{
+    if(gen!==_restoreGen||drawing) return; // 로드 중 새 획/새 복원 발생 → 폐기(그린 내용 보존)
+    ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    // undo/redo 결과도 백업에 반영. 없으면 되돌린 그림이 로컬 백업에 남지 않아
+    //   새로고침/튕김 시 되돌리기 전 그림으로 되살아남.
+    if(persist){_canvasUserDirty=true;_canvasEditedSinceSync=true;_canvasEditSeq++;autoSave();_scheduleCanvasSave();}
+  };
   img.src=url;
 }
-function undoCanvas(){if(_canvasHistIdx>0){_canvasHistIdx--;restoreCanvasState(_canvasHistory[_canvasHistIdx]);}}
-function redoCanvas(){if(_canvasHistIdx<_canvasHistory.length-1){_canvasHistIdx++;restoreCanvasState(_canvasHistory[_canvasHistIdx]);}}
+// idx는 동기적으로 이동한다(연타 시 한 칸씩 정확히 누적). 늦은 onload가 새 획을 덮는 desync는
+//   이미 start()의 _restoreGen++가 폐기하고, 그리는 중(drawing)엔 undo/redo 자체를 무시해 막는다.
+//   (idx를 onload에서만 옮기면 저사양 태블릿에서 연타가 한 칸으로 뭉개지는 회귀가 났었다.)
+function undoCanvas(){if(!drawing&&_canvasHistIdx>0){_canvasHistIdx--;restoreCanvasState(_canvasHistory[_canvasHistIdx],true);}}
+function redoCanvas(){if(!drawing&&_canvasHistIdx<_canvasHistory.length-1){_canvasHistIdx++;restoreCanvasState(_canvasHistory[_canvasHistIdx],true);}}
 function makePencilCursor(size){
   const s=Math.max(16,Math.min(40,size+12));
   const half=Math.round(s/2);
@@ -2122,44 +2593,52 @@ function initCanvas(){
     return {x:(cx-r.left)*sx,y:(cy-r.top)*sy};
   };
   const getBrush=()=>Math.max(1,parseInt(document.getElementById('brushSize').value)||5);
+  let _activePointerId=null; // 첫 포인터만 그린다(멀티터치/팜리젝션)
   const start=e=>{
     if(e.cancelable) e.preventDefault();
+    // 멀티터치/팜리젝션: 긋는 중 손바닥이 닿으면(두 번째 포인터) 무시한다. 없으면 손바닥→손가락을
+    //   가로지르는 오선이 그어지고, 손바닥을 뗄 때 end가 획을 죽인 채 그 오선을 백업에 확정 저장한다.
+    if(e.pointerId!=null){
+      // 주 포인터(isPrimary)는 항상 새 제스처의 주인으로 인정 → 활성 포인터의 up/cancel이 유실돼
+      //   박제되더라도 다음 깨끗한 탭에서 자가 복구된다(데드락 방지). 비주 포인터(팜)만 무시한다.
+      if(!e.isPrimary && _activePointerId!=null && _activePointerId!==e.pointerId) return;
+      _activePointerId=e.pointerId;
+    } else if(e.touches && e.touches.length>1){ return; } // 구형 touch 멀티터치(손바닥) 무시
     // 포인터 캡처: 획이 캔버스 밖으로 나가도 계속 추적 (S펜/손가락)
     if(e.pointerId!=null && canvas.setPointerCapture){ try{ canvas.setPointerCapture(e.pointerId); }catch(_){} }
     const p=getPos(e);
+    _restoreGen++; // 진행 중인 undo/redo 복원 무효화 — 늦은 onload가 새 입력을 덮지 않도록
     if(_filling){
-      floodFill(p.x,p.y,erasing?'#ffffff':brushColor);
+      floodFill(p.x,p.y,erasing?'#ffffff':brushColor);_canvasEditedSinceSync=true;_canvasEditSeq++;
       // 페인트 후 자동 저장 트리거
       autoSave();
-      if(me){
-        const data=getCanvasData();
-        // 편집 중에는 localStorage에만 저장 (Cloudinary 업로드는 제출 시에 1회)
-        try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
-      }
+      _scheduleCanvasSave(); // 캔버스 로컬 백업 디바운스(과거: 매 fill toDataURL+setItem)
       return;
     }
-    drawing=true;_canvasUserDirty=true;
+    drawing=true;_canvasUserDirty=true;_canvasEditedSinceSync=true;_canvasEditSeq++;
     ctx.beginPath();ctx.moveTo(p.x,p.y);
     ctx.strokeStyle=erasing?'white':brushColor;
     ctx.lineWidth=erasing?getBrush()*3:getBrush();
   };
   const move=e=>{
     if(e.cancelable) e.preventDefault();if(!drawing)return;
+    if(e.pointerId!=null && _activePointerId!=null && e.pointerId!==_activePointerId) return; // 다른 포인터(팜) 무시
     const p=getPos(e);
     ctx.strokeStyle=erasing?'white':brushColor;
     ctx.lineWidth=erasing?getBrush()*3:getBrush();
     ctx.lineTo(p.x,p.y);ctx.stroke();
     ctx.beginPath();ctx.moveTo(p.x,p.y);
   };
-  const end=()=>{
+  const end=e=>{
+    // 팜(비활성 포인터)이 떨어질 때는 획을 마감하지 않는다 — 활성 포인터는 아직 그리는 중이다.
+    if(e && e.pointerId!=null){
+      if(_activePointerId!=null && e.pointerId!==_activePointerId) return;
+      _activePointerId=null;
+    }
     if(drawing){
       drawing=false;saveCanvasState();autoSave();
-      // 그림 백업: localStorage(base64) + Cloudinary 업로드 후 URL을 Firebase에 저장 (debounce 3초)
-      if(me){
-        const data=getCanvasData();
-        // 편집 중에는 localStorage에만 저장 (Cloudinary 업로드는 제출 시에 1회)
-        try{ localStorage.setItem('sw_canvas_'+me.cd+'_'+currentMonth, data); }catch(e){}
-      }
+      // 그림 백업: localStorage(base64) — 디바운스(과거: 매 획 toDataURL+setItem → 대형캔버스 메모리/쿼터 폭증)
+      _scheduleCanvasSave();
     }
   };
   // Pointer Events로 통합 — 마우스/터치/S펜 모두 일관 처리 (삼성 태블릿 S펜 대응)
@@ -2176,6 +2655,7 @@ function initCanvas(){
     canvas.addEventListener('touchstart',start,{passive:false});
     canvas.addEventListener('touchmove',move,{passive:false});
     canvas.addEventListener('touchend',end);
+    canvas.addEventListener('touchcancel',end); // 팜리젝션/시스템 제스처로 터치 취소 시 획 마감(유실 방지)
   }
   // 키보드 단축키
   document.addEventListener('keydown',e=>{
@@ -2204,11 +2684,19 @@ function toggleEraser(){
   updateCursorSize();
 }
 function clearCanvas(){
+  // 🗑는 태블릿에서 ↩ 바로 옆이라 오터치가 잦은데, 로컬 백업과 원격 그림을 즉시 지운다 → 확인 필수.
+  if(!confirm('그림을 모두 지울까요?\n(실수로 지웠다면 되돌리기 ↩로 다시 불러올 수 있어요)')) return;
   ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
   saveCanvasState();
   // 사용자 의도적 삭제 — 원격 그림 reload 방지 + Cloudinary 캐시 키 무효화
-  _canvasUserDirty=true;
+  _canvasUserDirty=true;_canvasEditedSinceSync=true;_canvasEditSeq++;
+  // 복원 억제: 아래 drawings.remove()는 비동기인데, dalgona_drawing_id.remove()가 레코드 리스너를
+  //   깨워 fillForm→restoreNow가 먼저 once('value')로 아직 안 지워진 remote URL을 읽어올 수 있다.
+  //   restoreNow의 가드는 isCanvasBlank()가 true면 통과해버리므로(방금 지워서 blank!) 지운 그림이
+  //   되살아난다. _canvasUserDirty만으론 못 막아서 별도 플래그로 이 세션의 복원을 끈다.
+  _canvasSuppressRestore=true;
   if(me){
+    if(_canvasSaveTimer){ clearTimeout(_canvasSaveTimer); _canvasSaveTimer=null; } // 대기 저장이 삭제를 되살리지 않도록
     try{ localStorage.removeItem('sw_canvas_'+me.cd+'_'+currentMonth); }catch(e){}
     const drawingId='student_'+me.cd+'_'+currentMonth;
     firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).remove().catch(()=>{});
@@ -2326,7 +2814,7 @@ function floodFill(sx,sy,fillHex){
   }
   ctx.putImageData(img,0,0);
   saveCanvasState();
-  _canvasUserDirty=true;
+  _canvasUserDirty=true;_canvasEditedSinceSync=true;_canvasEditSeq++;
 }
 function getCanvasData(){
   if(!canvas) return '';
@@ -2346,27 +2834,54 @@ function isCanvasBlank(){
 function loadCanvasFromData(dataUrl){
   if(!canvas||!dataUrl)return;
   const img=new Image();
+  // 로드를 시작한 시점의 월/학생을 붙잡는다. _canvasUserDirty만으로는 부족하다 —
+  //   resetForm이 그 플래그를 false로 만들기 때문에, 6월 그림이 로딩되는 중 7월로 전환하면
+  //   뒤늦은 onload가 7월 캔버스에 6월 그림을 그리고 undo 기준선까지 오염시킨다.
+  //   그 뒤 7월에 획 하나만 그어도 "6월 그림+7월 획"이 7월 키로 저장되고 업로드된다.
+  //   (_restoreGen을 쓰면 안 된다 — 로컬→원격 2단계 복원에서 로컬이 폐기돼
+  //    원격 로드 실패 시 빈 화면이 된다. 신원 비교여야 두 단계가 모두 살아남는다.)
+  const _mo=currentMonth, _cd=me&&me.cd;
   // Cloudinary 등 HTTPS 이미지는 CORS 허용해야 toDataURL이 가능
   if(/^https?:/i.test(dataUrl)) img.crossOrigin='anonymous';
   img.onload=()=>{
+    if(currentMonth!==_mo||(me&&me.cd)!==_cd) return; // 다른 월/학생으로 바뀜 → 폐기
     if(_canvasUserDirty) return; // 이미지 로딩 지연 중 학생이 그리기 시작했으면 덮어쓰기 금지
     ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);
     ctx.drawImage(img,0,0,canvas.width,canvas.height);
+    // 불러온 그림을 undo 기준선으로 삼는다. 이걸 안 하면 history[0]이 initCanvas의 빈 캔버스라
+    //   저장된 그림을 연 뒤 첫 undo가 "획 하나 취소"가 아니라 "그림 전체 삭제"가 된다.
+    //   (undo 결과를 백업에 반영하게 된 뒤로는 그 빈 상태가 백업에까지 확정돼 더 위험.)
+    // 히스토리 항목은 restoreCanvasState가 img.src로 그리므로 toDataURL 결과일 필요가 없다.
+    //   data:(로컬 백업 축소 JPEG)면 문자열을 그대로 재사용 — 인코딩 0회 + 메모리도 원본PNG보다 작다.
+    //   이 경로가 fillForm마다 도는 흔한 경로라 저사양 태블릿 부하가 실제로 줄어든다.
+    //   https(Cloudinary)는 그대로 넣으면 restoreCanvasState가 crossOrigin을 안 걸어 undo 시 캔버스가
+    //   tainted가 되고(이후 제출용 getCanvasData가 throw) 오프라인에선 캐시 밀리면 undo가 실패 →
+    //   이때만 자립적인 스냅샷을 뜬다. tainted면 throw → catch → 기존 동작으로 degrade.
+    try{ _canvasHistory=[/^data:/i.test(dataUrl)?dataUrl:canvas.toDataURL()]; _canvasHistIdx=0; }catch(_){}
   };
   img.src=dataUrl;
 }
 
 // ═══ 선물 선택 ═══
-function selectGift(type,el){
+// fromFill: fillForm이 서버 데이터를 채울 때는 autoSave를 부르면 안 된다.
+//   부르면 _formEditingDirty가 서고 로컬 draft가 항상 서버보다 새 타임스탬프를 갖게 돼
+//   stale draft가 영구히 우선하는 버그가 된다. 사용자 클릭일 때만 저장한다.
+function selectGift(type,el,fromFill){
   currentGift=type;
+  // 학생이 직접 고른 것인지 기록한다. 선물은 기본값('마음')과 학생 선택이 같은 값일 수 있어
+  //   다른 칸처럼 "값이 있으면 학생 것"으로 판정할 수 없다 — 명시적으로 '마음'을 고른 학생의
+  //   선택이 첫 채우기 때 서버 옛 값으로 조용히 바뀌던 문제.
+  if(!fromFill) _giftUserPicked=true;
   document.querySelectorAll('.gift-option').forEach(o=>o.classList.remove('selected'));
   if(el) el.classList.add('selected');
+  if(!fromFill) autoSave(); // 선물 선택이 마지막 동작이면 저장 안 돼 사라지던 문제
 }
 
 // ═══ 부저 (학생) ═══
 // ═══ 강제 새로고침 ═══
 let _myReloadStamp=null;
 function listenForceReload(){
+  saengRef.child('force_reload').off('value'); // 재로그인 시 중복 attach 방지
   saengRef.child('force_reload').on('value',snap=>{
     const stamp=snap.val();
     if(!stamp) return;
@@ -2376,7 +2891,15 @@ function listenForceReload(){
       // 캐시 우회 새로고침
       const url=new URL(location.href);
       url.searchParams.set('v',stamp);
-      location.replace(url.toString());
+      // 지터 필수 — 30대가 같은 tick에 재부팅하면 각 태블릿이 부팅마다 EventShop/stu 전체 노드
+      //   (전교생 inv, 월마다 누적)를 받아 교실 AP가 한 번에 포화된다. 타이머 만료는 같은 이유로
+      //   이미 지터를 쓰는데 여기만 없었다. 총량은 그대로고 순간 동시성만 흩뿌린다.
+      setTimeout(()=>{
+        // 재부팅 직전에 작성분을 로컬에 확정 — 둘 다 localStorage만 쓰므로(네트워크 0) 안전하다.
+        try{ _flushCanvasSave(); }catch(e){}
+        try{ autoSave(); }catch(e){}
+        location.replace(url.toString());
+      }, Math.random()*10000);
     }
   });
 }
@@ -2386,6 +2909,7 @@ async function forceClientReload(){
   toast('🔄 새로고침 신호 전송됨');
 }
 function listenBuzzer(){
+  saengRef.child('buzzer').off('value'); // 재로그인 시 중복 attach 방지
   saengRef.child('buzzer').on('value',snap=>{
     const data=snap.val()||{};
     const overlay=document.getElementById('buzzerOverlay');
@@ -2418,6 +2942,7 @@ async function pressBuzzer(){
 
 // ═══ 부저 (교사) ═══
 function listenBuzzerTeacher(){
+  saengRef.child('buzzer').off('value'); // 재로그인 시 중복 attach 방지
   saengRef.child('buzzer').on('value',snap=>{
     const data=snap.val()||{};
     const startBtn=document.getElementById('buzzerStartBtn');
@@ -2462,6 +2987,7 @@ let timerLocalRemaining=0;
 let timerSetSeconds=300; // 교사가 설정한 타이머 초
 
 function listenTimerStudent(){
+  saengRef.child('timer').off('value'); // 재로그인 시 중복 attach 방지
   saengRef.child('timer').on('value',snap=>{
     const d=snap.val()||{};
     const box=document.getElementById('stuTimerBox');
@@ -2501,7 +3027,21 @@ function startTimerClient(end_at){
     if(rem===0){
       stopTimerClient();
       // 임시저장 후 end overlay는 Firebase show_end 이벤트가 처리
-      if(me&&!formLocked) saveRecord('draft').catch(()=>{});
+      // 지터: 반 전체가 같은 end_at을 공유해 30대가 "동시에" 그림을 업로드하면(각 수백 KB)
+      //   교실 AP 한 대에 수 MB가 한꺼번에 몰려 서명/업로드 타임아웃이 난다. 0~15초로 흩뿌린다.
+      //   (4초로는 순간 동시성이 너무 높았다. 총 전송량은 어차피 같으니 동시성을 낮추는 게 핵심.)
+      //   보통은 종료 오버레이가 덮고 있어 지연이 안 보이고, 교사가 탭을 닫아 오버레이가 없더라도
+      //   아래 월/사용자 캡처 가드가 엉뚱한 곳에 쓰는 걸 막는다.
+      //   단 지터 동안 상태가 바뀔 수 있다: 교사가 그 사이 오버레이를 해제하면 학생이 월을 바꿀 수 있고,
+      //   그러면 예약된 저장이 "새 월"에 빈 폼을 써버린다(_writeCanvasDraft의 월 전환 버그와 같은 계열).
+      //   예약 시점의 월/사용자를 붙잡아 두고 달라졌으면 취소한다.
+      if(me&&!formLocked){
+        const _tMonth=currentMonth, _tCd=me.cd;
+        setTimeout(()=>{
+          if(!me||me.cd!==_tCd||currentMonth!==_tMonth||formLocked) return;
+          saveRecord('draft').catch(()=>{});
+        },Math.floor(Math.random()*15000));
+      }
     }
   },500);
 }
@@ -2518,6 +3058,7 @@ function setTimerUIRunning(running,dispText,showInputs){
   if(running&&!showInputs&&dispText!==undefined) disp.textContent=dispText;
 }
 function listenTimerTeacher(){
+  saengRef.child('timer').off('value'); // 재로그인 시 중복 attach 방지
   saengRef.child('timer').on('value',snap=>{
     const d=snap.val()||{};
     _lastTimerState=d;
@@ -2641,7 +3182,16 @@ async function addMonthToSelector(){
   const label=(inp?.value||'').trim();
   if(!label) return alert('제목을 입력해주세요');
   const val=label.replace(/[.#$/\[\]]/g,'_');
-  // 같은 이름으로 재생성 시 이전 잔여 데이터(records/nominations/dalgona/drawings) 정리
+  // 이미 있는 월 이름이면 절대 진행하지 않는다.
+  //   아래 "잔여 데이터 정리"는 삭제된 월을 같은 이름으로 되살릴 때를 위한 것인데,
+  //   중복 검사가 없어서 살아있는 월 이름을 다시 입력하면 확인창 하나 없이
+  //   그 달의 records/nominations/dalgona/drawings + 학생 가방 events가 전부 날아갔다.
+  //   (그러고도 "✅ 추가됨"만 떴다.) 재생성이 필요하면 먼저 삭제하도록 강제한다.
+  await loadMonthsFromFirebase(); // 다른 교사가 방금 만든 월도 잡도록 최신화
+  if(_monthsCache&&_monthsCache[val]!==undefined){
+    return alert(`이미 있는 월이에요: "${label}"\n\n다시 만들려면 먼저 월 관리에서 삭제해주세요.\n(그냥 추가하면 기존 기록이 지워질 수 있어 막았어요)`);
+  }
+  // 삭제됐던 월을 같은 이름으로 재생성 — 잔여 데이터(records/nominations/dalgona/drawings) 정리
   try{
     await saengRef.child('records/'+val).remove();
     const nomSnap=await saengRef.child('nominations').once('value');
@@ -2666,9 +3216,13 @@ async function addMonthToSelector(){
       ? stuRaw.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
       : Object.entries(stuRaw);
     for(const [key,stu] of entries){
-      if(!stu||!Array.isArray(stu.inv)) continue;
+      // inv는 Firebase에서 배열로도 객체로도 돌아온다(_normInv/getInv가 양쪽을 다루는 이유).
+      //   Array.isArray만 보면 객체 형태인 학생은 통째로 건너뛰어, 지운 달의 events가 그 학생
+      //   가방에 영영 남는다 — 삭제는 "성공"으로 보고된 채로.
+      const _inv=stu&&(Array.isArray(stu.inv)?stu.inv:(stu.inv?Object.values(stu.inv).filter(Boolean):null));
+      if(!_inv||!_inv.length) continue;
       let changed=false;
-      const newInv=stu.inv.map(it=>{
+      const newInv=_inv.map(it=>{
         if(!it||!Array.isArray(it.events)) return it;
         const filtered=it.events.filter(ev=>{
           const k=ev&&(ev.nomKey||ev.dalKey)||'';
@@ -2676,11 +3230,14 @@ async function addMonthToSelector(){
         });
         if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
         return it;
-      }).filter(it=>{
-        if(it&&Array.isArray(it.events)&&it.events.length===0&&(it.n==='달고나'||it.n==='골든티켓'||it.n==='goldenTicket'||it.n==='dalgona')) {changed=true;return false;}
-        return true;
       });
-      if(changed) await shopRef.child('stu/'+key+'/inv').set(newInv);
+      // 실제 삭제는 아래 _filterMonthInv 트랜잭션이 수행한다(직접 지급/구매한 special 아이템 보존 로직 포함).
+      if(changed){
+        await shopRef.child('stu/'+key+'/inv').transaction(cur=>_filterMonthInv(cur,val));
+        // 이벤트 상점의 증분 동기화가 inv 변경을 보도록 — 빠뜨리면 상점을 켜둔 학생이 옛 inv를
+        //   계속 쓰다가 다음 쓰기에서 방금 정리한 events를 되살린다.
+        try{ await shopRef.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
+      }
     }
   }catch(e){console.warn('월 잔여데이터 정리 실패',e);}
   await saveMonthToFirebase(val,label);
@@ -3053,17 +3610,24 @@ async function loadDetailPanel(cd,month){
   hydrateDrawings(wrap);
 }
 
+// 키 형식: <month>_<cd>_<type>. month에 하이픈/underscore/한글이 있을 수 있으므로 뒤(type,cd)부터 파싱
+function _parseNomKey(key){
+  const parts=key.split('_');
+  const cd=parts[parts.length-2];
+  const month=parts.slice(0,parts.length-2).join('_');
+  return {cd,month};
+}
 async function updateNom(key,status,panelId){
   await saengRef.child('nominations/'+key).update({status});
   toast(status==='approved'?'✅ 승인 완료':'❌ 반려 완료');
   // 패널 내 배지 갱신을 위해 전체 패널 재로드
-  const parts=key.split('_');const cd=parts[2];const month=parts[0]+'-'+parts[1];
+  const {cd,month}=_parseNomKey(key);
   await loadDetailPanel(cd,month);
 }
 async function updateDalgona(key,status,panelId){
   await saengRef.child('dalgona/'+key).update({status});
   toast(status==='approved'?'✅ 발송 승인':'❌ 반려 완료');
-  const parts=key.split('_');const cd=parts[2];const month=parts[0]+'-'+parts[1];
+  const {cd,month}=_parseNomKey(key);
   await loadDetailPanel(cd,month);
 }
 let _rejectTarget={cd:null,month:null};
@@ -3127,7 +3691,10 @@ async function _readRawStu(){
 async function _addStudentKeyed(entries,migrated,nm,cd){
   // 추가할 Firebase 키 결정: cd키 모드면 cd, 레거시면 다음 정수 인덱스
   const key = migrated ? cd : String(entries.reduce((mx,[k])=>{const i=parseInt(k);return isNaN(i)?mx:Math.max(mx,i);},-1)+1);
-  await shopRef.child('stu/'+key).set({nm,cd,updatedAt:Date.now()});
+  // ⚠️ .set() 금지 — EventShop stu는 여러 앱이 공유한다. 중복검사는 v.cd 필드 기준인데 쓰기는 키 기준이라
+  //   두 기준이 어긋나는 노드(cd 필드 없거나 다른 앱이 만든 노드)가 이 키에 있으면 .set()이 inv·쿠키·bank·
+  //   아바타를 통째로 날린다. update()는 이 세 필드만 병합하므로 기존 노드를 보존한다(새 학생이면 동일 생성).
+  await shopRef.child('stu/'+key).update({nm,cd,updatedAt:Date.now()});
   entries.push([key,{nm,cd}]);
 }
 async function addStudent(){
@@ -3173,7 +3740,11 @@ async function deleteStudent(idx){
   const stu=getStudentList();
   const target=stu[idx];
   if(!target) return;
-  if(!confirm(`${target.nm} 학생을 삭제할까요?`)) return;
+  // 이건 생활기록부만의 삭제가 아니다 — shopRef는 ClassData/EventShop이라 이벤트 상점의
+  //   쿠키·가방·아바타까지 통째로 지운다(다른 앱들이 쓰는 데이터). 예전 확인창은
+  //   "학생을 삭제할까요?"뿐이라 그 범위를 전혀 알리지 않았다. 되돌릴 수 없으므로 2단계로 묻는다.
+  if(!confirm(`⚠️ ${target.nm}(${target.cd}) 학생을 완전히 삭제할까요?\n\n생활기록부 명단에서만 빠지는 게 아니라,\n이벤트 상점의 쿠키·가방 아이템·아바타까지 모두 삭제됩니다.\n(다른 앱에서도 사라지며 되돌릴 수 없어요)`)) return;
+  if(!confirm(`정말 마지막 확인이에요.\n${target.nm} 학생의 쿠키와 가방을 되돌릴 수 없습니다.\n계속할까요?`)) return;
   // 전체 배열 .set 대신, cd로 실제 Firebase 키를 찾아 그 노드만 제거 (키 구조 보존)
   const {entries}=await _readRawStu();
   const found=entries.find(([_,v])=>v&&String(v.cd).trim()===String(target.cd).trim());
@@ -3233,9 +3804,25 @@ async function importBackup(event){
   event.target.value='';
 }
 async function clearAllData(){
-  if(!confirm('⚠️ 모든 생활기록부 데이터를 완전히 삭제합니다.\n\n• 모든 월 기록, 추천(방어자/유망주), 달고나, 알림\n• Firebase 그림 참조 + Cloudinary 그림 정보\n\n학생 명단·설정·학생 가방 아이템은 유지됩니다.\n정말 진행할까요?')) return;
+  if(!confirm('⚠️ 모든 생활기록부 데이터를 완전히 삭제합니다.\n\n• 모든 월 기록, 추천(방어자/유망주), 달고나, 알림\n• 이 앱이 올린 그림(학생 달고나 그림 + 배달된 그림)\n\n학생 명단·설정·가방 아이템은 유지됩니다.\n(단, 가방에 있는 달고나의 그림은 안 보이게 됩니다)\n정말 진행할까요?')) return;
   if(!confirm('정말 마지막 확인입니다.\n되돌릴 수 없습니다. 계속할까요?')) return;
   try{
+    // drawings는 EventShop의 공유 노드다. 통째로 remove하면 다른 앱이 올린 그림까지 지운다.
+    //   이 앱이 만든 키만 골라 지운다: student_{cd}_{month}(학생 그림) + dalgona가 참조하는 배달 그림.
+    //   dalgona를 지우기 "전에" 참조를 먼저 수집해야 한다.
+    const _dalSnap=await saengRef.child('dalgona').once('value');
+    const _refs=new Set();
+    //   delivered_drawing_id = 배달 시 만든 사본({ts}_{from}_{to}). drawingId는 이 앱이 달고나 노드에
+    //   쓴 적이 없는 필드지만(옛 데이터 대비) 그대로 둔다. 이 필드가 생기기 전에 배달된 사본은
+    //   식별할 방법이 없어 남는다 — 공유 노드라 이름만 보고 지우면 다른 앱 그림을 지운다.
+    _dalSnap.forEach(c=>{ const v=c.val()||{};
+      if(v.drawingId) _refs.add(v.drawingId);
+      if(v.delivered_drawing_id) _refs.add(v.delivered_drawing_id);
+      if(v.drawingRef) _refs.add(v.drawingRef); });
+    const _drRoot=firebase.database().ref('ClassData/EventShop/drawings');
+    const _drSnap=await _drRoot.once('value');
+    const _drDels=[];
+    _drSnap.forEach(c=>{ if(c.key.indexOf('student_')===0||_refs.has(c.key)) _drDels.push(_drRoot.child(c.key).remove()); });
     await Promise.all([
       saengRef.child('records').remove(),
       saengRef.child('nominations').remove(),
@@ -3245,7 +3832,7 @@ async function clearAllData(){
       saengRef.child('months_order').remove(),
       saengRef.child('months_hidden').remove(),
       saengRef.child('notifications').remove(),
-      firebase.database().ref('ClassData/EventShop/drawings').remove(),
+      ..._drDels,
     ]);
     _monthsCache={};_monthsOrder={};_hiddenCache={};
     populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
@@ -3260,13 +3847,11 @@ async function clearAllData(){
 let rankingData={noms:[],dals:[]};
 async function loadRanking(){
   const month=document.getElementById('tMonthSel5').value||currentMonth;
-  const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').once('value'),
-    saengRef.child('dalgona').once('value')
-  ]);
-  const matches=(v,key)=>v&&(v.month===month||(key&&key.startsWith(month+'_')));
-  const noms=[]; nomSnap.forEach(c=>{if(matches(c.val(),c.key)) noms.push({key:c.key,...c.val()});});
-  const dals=[]; dalSnap.forEach(c=>{if(matches(c.val(),c.key)) dals.push({key:c.key,...c.val()});});
+  // 발송과 같은 월 bounded 쿼리를 쓴다. 예전엔 nominations/dalgona **루트 전체**를 받아 클라이언트에서
+  //   월을 걸러, 운영 개월수에 비례해 다운로드가 무한히 늘었다(랭킹 탭 클릭과 월 드롭다운 onchange
+  //   양쪽에서 호출되므로 교사가 월을 훑을 때마다 전 기간을 다시 받았다).
+  //   판정 기준도 발송과 일치하게 된다 — 발송이 못 보는 항목은 랭킹에도 안 잡히는 게 맞다.
+  const {noms,dals}=await _fetchMonthNomsAndDals(month);
   rankingData={noms,dals};
   const defCount={},proCount={},dalCount={};
   noms.filter(n=>n.status!=='rejected').forEach(n=>{
@@ -3398,7 +3983,15 @@ async function sendSnackCoupons(){
   if(checked.length<1){ alert('1명 이상 선택해주세요.'); return; }
   const picks=checked.map(c=>({cd:c.dataset.cd,name:c.dataset.name}));
   if(!confirm('아래 '+picks.length+'명에게 간식 쿠폰을 발송할까요?\n\n'+picks.map(p=>'· '+p.name).join('\n'))) return;
+  if(_deliverLock){ alert('⏳ 발송 처리 중이에요. 잠시 후 다시 시도하세요.'); return; }
+  _deliverLock=true;
+  // 기기 간 발송락 — PC와 폰에서 겹치는 학생을 각각 선택해 동시에 📦발송하면 탭 변수 _deliverLock만으론
+  //   둘 다 통과해 수라상이 이중 지급된다(append엔 dedup 키가 없다). _doDelivery와 동일하게 방어한다.
+  let _snkTok=null, _snkHb=null;
   try{
+    _snkTok=await _acquireDeliverLock();
+    if(!_snkTok){ alert('⏳ 다른 기기에서 발송이 진행 중이에요.\n끝난 뒤 다시 시도해주세요.'); return; }
+    _snkHb=_startDeliverHeartbeat(_snkTok);
     const shopRoot=firebase.database().ref('ClassData/EventShop');
     const [stuSnap,itmSnap]=await Promise.all([
       shopRoot.child('stu').once('value'),
@@ -3417,10 +4010,14 @@ async function sendSnackCoupons(){
       const found=stuEntries.find(([k,s])=>s&&String(s.cd||'').trim()===String(p.cd||'').trim());
       if(!found){ fail.push(p.name); continue; }
       const [key,s]=found;
-      let inv=Array.isArray(s.inv)?s.inv.slice():(s.inv?Object.values(s.inv).filter(Boolean):[]);
-      inv.push({n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C',fromTeacherMsg:true,ts:Date.now()});
+      const _surangItem={n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C',fromTeacherMsg:true,ts:Date.now()};
       try{
-        await shopRoot.child('stu/'+key+'/inv').set(inv);
+        // 트랜잭션 append — 발송 중 학생 구매/사용을 덮어쓰지 않음
+        await shopRoot.child('stu/'+key+'/inv').transaction(cur=>{const arr=_normInv(cur);arr.push(_surangItem);return arr;});
+        // updatedAt 갱신 필수 — 이벤트 상점은 updatedAt으로 증분 동기화한다. 빠뜨리면 상점을 켜둔 학생의
+        //   클라이언트가 inv 변경을 못 보고 캐시된 옛 inv를 계속 쓰다가, 다음 inv 쓰기에서 이 수라상을 날린다.
+        //   (_doDeliveryInner는 이걸 하는데 여기만 빠져 있었다.)
+        try{ await shopRoot.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
         ok++;
         const chk=document.querySelector(`.msgPickChk[data-cd="${p.cd}"]`);
         if(chk){
@@ -3448,6 +4045,10 @@ async function sendSnackCoupons(){
   }catch(e){
     console.error(e);
     alert('발송 실패: '+e.message);
+  }finally{
+    if(_snkHb) clearInterval(_snkHb);
+    if(_snkTok) await _releaseDeliverLock(_snkTok);
+    _deliverLock=false;
   }
 }
 async function openDeliveryModal(){
@@ -3520,6 +4121,16 @@ window.deliverOneStudent=async function(cd,month){
   const stuName=getStudentName(cd)||cd;
   const ok=await prettyConfirm({title:'학생 발송',icon:'📦',body:`<b>${stuName}</b> 학생의 ${_monthsCache[month]||month} 승인 항목을<br>가방으로 발송할까요?`,okText:'발송하기'});
   if(!ok) return;
+  // 발송 직전 서버 상태 재확인. 다른 기기에서 반려했는데 이 화면이 갱신 안 된 채 남아 반려된 기록의
+  //   달고나가 발송되고 보낸 학생 쿠키가 차감되던 구멍을 막는다.
+  //   ⚠️ 실제 발송 필터는 nomination/dalgona 자체의 status==='approved'다(record.status가 아님).
+  //   교사가 개별승인(updateNomFromMini)만 하면 record는 submitted인 채 추천만 approved가 되므로,
+  //   record.status==='approved'로 게이트하면 전체발송은 되는데 개별발송만 막히는 불일치가 생긴다.
+  //   → 반려(rejected)일 때만 차단하고, 그 외에는 전체발송과 동일하게 진행한다.
+  const recSnap=await saengRef.child('records/'+month+'/'+cd).once('value');
+  const rec=recSnap.val();
+  if(rec && rec.status==='rejected'){ toast('⚠️ 반려된 기록이라 발송할 수 없어요 — 새로고침 후 확인하세요'); return; }
+  if(rec && rec.status==='approved') await ensureNominationsAndDalgonaForRecord(cd,month,rec); // 취소된 달고나 stale 노드 정리(전체발송과 동일 조건)
   await autoApproveRelated(cd,month);
   await _doDelivery({month,filterCd:cd,allowReDeliver:false,silent:false});
 };
@@ -3540,7 +4151,122 @@ window.deliverApprovedToShop=async function(month){
   return await _doDelivery({month,filterCd:null,allowReDeliver:false,silent:false});
 };
 
-async function _doDelivery({month,filterCd,allowReDeliver,silent}){
+// ── inv 트랜잭션 병합 헬퍼 ──
+// 발송은 학생별로 inv를 시작 시점에 읽고, Cloudinary 업로드 등 수 초의 await 후 저장한다.
+// 그 사이 학생이 이벤트 상점에서 구매/사용하면 통째 .set(inv)가 그 변경을 덮어써 아이템/이벤트가 소실된다.
+// → 저장 시 트랜잭션으로 "우리가 추가한 것(ops)"만 최신 서버 inv에 재적용한다.
+function _normInv(cur){
+  let arr=Array.isArray(cur)?cur.slice():(cur?Object.values(cur).filter(Boolean):[]);
+  return arr.map(it=>{
+    if(!it||typeof it!=='object') return it;
+    // events 없는 아이템은 events 키를 추가하지 않음 — Firebase는 undefined 값 포함 객체 write 시 예외
+    if(it.events===undefined) return {...it};
+    const events=Array.isArray(it.events)?it.events.slice():(it.events?Object.values(it.events).filter(Boolean):[]);
+    return {...it,events};
+  });
+}
+function _invTpl(it){const t={n:it.n,i:it.i,g:it.g,st:it.st||'active',special:it.special,usedCount:it.usedCount||0};Object.keys(t).forEach(k=>{if(t[k]===undefined)delete t[k];});return t;} // undefined 키 제거 필수 — RTDB가 undefined 포함 객체를 거부해 발송 트랜잭션 전체가 throw된다
+// 특정 월(val)에 발송된 이벤트를 최신 서버 inv에서 제거 (트랜잭션용 — 동시 구매/사용 덮어쓰기 방지)
+function _filterMonthInv(cur,val){
+  const arr=_normInv(cur);
+  return arr.map(it=>{
+    if(!it||!Array.isArray(it.events)) return it;
+    const filtered=it.events.filter(ev=>{const k=ev&&(ev.nomKey||ev.dalKey)||'';return !(k&&k.startsWith(val+'_'));});
+    if(filtered.length===it.events.length) return it; // 이 달 이벤트 없음 — 손대지 않음
+    // ⚠️ "이 달 이벤트로 events가 완전히 비워진" special 보상 아이템만 제거한다.
+    //   이름/special만 보면 EventShop에서 직접 지급·구매한 마법사의 티켓(goldenTicket, 원래 events:[])까지
+    //   월삭제 시 지워진다. 직접 지급분은 events가 줄어든 적이 없어(filtered.length===it.events.length)
+    //   위에서 이미 return됐으므로, 여기 오는 건 이 달 nomination/dalgona로 받은 것뿐이다.
+    if(filtered.length===0 && (it.special==='dalgona'||it.special==='goldenTicket'||it.n==='달고나'||it.n==='골든티켓'||it.n==='goldenTicket'||it.n==='dalgona')) return null;
+    return {...it,events:filtered};
+  }).filter(it=>it!==null);
+}
+function _mergeInvOps(cur,ops){
+  const arr=_normInv(cur);
+  for(const op of ops){
+    if(op.type==='append'){arr.push(op.item);continue;}
+    // op.type==='event' — special 아이템(goldenTicket/dalgona)에 이벤트 추가/ts갱신
+    let it=arr.find(x=>x&&x.special===op.special);
+    if(!it){it={...op.template,events:[]};arr.push(it);}
+    else{
+      if(op.template){if(op.template.n)it.n=op.template.n;if(op.template.i)it.i=op.template.i;if(op.template.g)it.g=op.template.g;}
+      if(!Array.isArray(it.events)) it.events=it.events?Object.values(it.events).filter(Boolean):[];
+    }
+    let ex=null;
+    if(op.dedupField&&op.dedupVal!=null) ex=it.events.find(ev=>ev&&ev[op.dedupField]===op.dedupVal);
+    else if(op.legacySubtype) ex=it.events.find(ev=>ev&&!ev.nomKey&&ev.subtype===op.legacySubtype);
+    if(ex) ex.ts=op.event.ts;
+    else it.events.push(op.event);
+  }
+  return arr;
+}
+
+// 발송 중복 실행 방지 락 — 더블클릭/동시 실행 시 수라상 이중 지급·shopUsed 이중 차감 방지
+// (inv 이벤트는 nomKey/dalKey로 dedup되지만 수라상 append와 shopUsed increment는 dedup 키가 없음)
+let _deliverLock=false;
+// 기기 간 발송 락. _deliverLock은 탭 변수라 한 탭의 더블클릭만 막는다 — 교사가 PC와 폰에서
+//   각각 발송하면 둘 다 통과해 수라상 이중 지급 + shopUsed 이중 차감이 난다
+//   (inv 이벤트만 nomKey/dalKey로 dedup되고, append와 increment는 dedup 키가 없다).
+//   ⚠️ RTDB 트랜잭션은 로컬 캐시(cur=null)로 먼저 실행되므로 반드시 once로 캐시를 프라이밍해야
+//   락이 있는데도 없다고 오판하지 않는다.
+// 락 값은 {ts,token}. 예전엔 숫자(ts)만 저장했으므로 남아있는 옛 값도 읽을 수 있어야 한다.
+const _lockTs=cur=>(cur&&typeof cur==='object')?cur.ts:cur;
+async function _acquireDeliverLock(){
+  const ref=saengRef.child('deliver_lock');
+  const token=Math.random().toString(36).slice(2)+'_'+Date.now();
+  try{
+    await ref.once('value'); // 캐시 프라이밍 (필수)
+    const res=await ref.transaction(cur=>{
+      const ts=_lockTs(cur);
+      if(ts && (Date.now()-ts) < 180000) return; // 다른 기기가 발송 중(3분 내) → abort
+      return {ts:Date.now(),token};
+    });
+    return (res&&res.committed)?token:null;
+  }catch(e){ console.error('[발송락] 획득 실패', e); return null; } // fail-closed
+}
+// 발송이 3분을 넘기면(레거시 base64 그림 재업로드 등) 만료로 간주돼 다른 기기가 끼어든다.
+//   진행 중에는 ts를 갱신해 그 창을 없앤다. 기기가 죽으면 갱신이 멈춰 3분 뒤 정상 만료된다.
+//   ⚠️ 내 토큰일 때만 갱신 — 이미 만료돼 남이 가져간 락을 되살리면 안 된다.
+function _startDeliverHeartbeat(token){
+  return setInterval(async()=>{
+    try{
+      const ref=saengRef.child('deliver_lock');
+      await ref.once('value'); // 프라이밍 — 없으면 cur=null로 읽혀 갱신이 조용히 abort된다
+      await ref.transaction(cur=>{
+        if(!cur||typeof cur!=='object'||cur.token!==token) return; // 내 락이 아님 → 그대로 둔다
+        return {ts:Date.now(),token};
+      });
+    }catch(e){}
+  },60000);
+}
+// ⚠️ 무조건 remove()하면 안 된다 — 내 락이 3분 만료로 남에게 넘어간 뒤 내 finally가 돌면
+//   실행 중인 다른 기기의 락을 지워 세 번째 발송이 그 위에 겹쳐 실행된다(이중 지급).
+async function _releaseDeliverLock(token){
+  try{
+    const ref=saengRef.child('deliver_lock');
+    await ref.once('value'); // 프라이밍
+    await ref.transaction(cur=>{
+      if(cur&&typeof cur==='object'&&cur.token&&cur.token!==token) return; // 남의 락 → 건드리지 않는다
+      return null; // 내 락(또는 옛 숫자 형식) → 해제
+    });
+  }catch(e){}
+}
+async function _doDelivery(args){
+  if(_deliverLock){ if(!args||!args.silent) toast('⏳ 발송 처리 중이에요. 잠시 후 다시 시도하세요.'); return {nT:0,nD:0,reSent:false}; }
+  _deliverLock=true;
+  try{
+    const _tok=await _acquireDeliverLock();
+    if(!_tok){
+      if(!args||!args.silent) alert('⏳ 다른 기기에서 발송이 진행 중이에요.\n끝난 뒤 다시 시도해주세요.');
+      return {nT:0,nD:0,reSent:false};
+    }
+    const _hb=_startDeliverHeartbeat(_tok);
+    try{ return await _doDeliveryInner(args); }
+    finally{ clearInterval(_hb); await _releaseDeliverLock(_tok); }
+  }
+  finally{ _deliverLock=false; }
+}
+async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
   const {noms,dals}=await _fetchMonthNomsAndDals(month);
   const inScope=x=>!filterCd||String(x.from).trim()===String(filterCd).trim()||String(x.to).trim()===String(filterCd).trim();
   // 항목 발송은 'from' 학생 기준 (작성자가 보낸 것), 단 받는 사람도 포함되도록 둘 다 체크는 의미 없음 — 발송 단위는 작성자
@@ -3579,6 +4305,9 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
   const findStu=(cd)=>stu.findIndex(s=>s&&String(s.cd).trim()===String(cd).trim());
   // 학생별 inv를 surgical update — 다른 필드 영향 없음
   const dirtyInvs={};
+  // 저장 시 트랜잭션 재적용용 — 학생 idx별로 우리가 추가한 항목/이벤트 기록
+  const invOps={};
+  const _pushOp=(idx,op)=>{(invOps[idx]||(invOps[idx]=[])).push(op);};
   const getInv=async(idx)=>{
     if(dirtyInvs[idx]!==undefined) return dirtyInvs[idx];
     const snap=await shopRef.child('stu/'+stuKeys[idx]+'/inv').once('value');
@@ -3627,6 +4356,7 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
   console.log('[쿠키검사] approved_dals=', approved_dals.map(d=>({key:d.key,from:d.from,gift:d.gift,delivered:d.delivered})));
   approved_dals.forEach(d=>{
     if(d.gift!=='cookie') return;
+    if(d.delivered) return; // 이미 발송된 간식은 재발송 시 쿠키 재차감 안 함 → 사전 부족 검사에서도 제외
     const fIdx=findStu(d.from);
     if(fIdx<0) { console.log('[쿠키검사] from 학생 못 찾음:', d.from); return; }
     senderCookieReq[fIdx]=(senderCookieReq[fIdx]||0)+5;
@@ -3641,16 +4371,31 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     if(avail<req) shortfalls.push({nm:s.nm,no:s.no,avail:Math.max(0,avail),req,short:req-avail});
   });
   console.log('[쿠키검사] shortfalls=', shortfalls);
+  // 보낸 학생별 사용 가능 쿠키 잔액 — 발송 중 5개 미만이면 간식 달고나를 발송하지 않음
+  const senderCookieAvail={};
+  Object.keys(senderCookieReq).forEach(idx=>{
+    const s=stu[idx];
+    senderCookieAvail[idx]=s?Math.max(0,(s.cookie||0)-(s.usedCookie||0)-(s.shopUsed||0)):0;
+  });
   if(shortfalls.length && !silent){
     const list=shortfalls.map(s=>`<li>${s.no?s.no+'번 ':''}<b>${s.nm}</b> — 보유 ${s.avail}🍪 / 필요 ${s.req}🍪 <span style="color:#E53935;">(${s.short}개 부족)</span></li>`).join('');
-    const ok=await prettyConfirm({title:'쿠키 부족 ⚠️',icon:'🍪',body:`다음 학생들은 달고나 간식 발송에 쿠키가 모자라요:<br><ul style="text-align:left;font-size:13px;line-height:1.7;margin:10px 0;padding-left:22px;">${list}</ul>그래도 발송할까요?<br><span style="font-size:12px;color:#999;">(부족분은 학생 보유 쿠키 한도로만 차감됩니다)</span>`,okText:'그래도 발송',cancelText:'취소'});
+    const ok=await prettyConfirm({title:'쿠키 부족 ⚠️',icon:'🍪',body:`다음 학생들은 쿠키가 모자라 <b>간식 달고나가 발송되지 않아요</b>:<br><ul style="text-align:left;font-size:13px;line-height:1.7;margin:10px 0;padding-left:22px;">${list}</ul>부족한 간식만 제외하고 나머지를 발송할까요?<br><span style="font-size:12px;color:#999;">(제외된 간식은 쿠키 충전 후 다시 발송할 수 있어요)</span>`,okText:'나머지 발송',cancelText:'취소'});
     if(!ok) return {nT:0,nD:0,reSent:false};
   }
   let nT=0,nD=0,nT_def=0,nT_pro=0;
+  const blockedDals=[]; // 잔액 부족으로 발송 차단된 간식 달고나
   // 디버그: 어떤 유형의 nomination이 처리/스킵됐는지 추적
   const _nomDebug={total:approved_noms.length,toMissing:0,already:0,pushedDef:0,pushedPro:0};
   // 발송 받은 학생(records 작성자) 기록 — 확인 컬럼 판정용
   const recipientCds=new Set();
+  // delivered 표시는 실제 지급(inv 트랜잭션 + shopUsed)이 끝난 뒤에 한꺼번에 찍는다.
+  //   루프 안에서 먼저 찍으면(예전 동작) 중간에 한 항목이 throw했을 때 — 그림 노드 set 실패,
+  //   회선 끊김 등 — 앞선 항목이 전부 "발송 완료"로 남는데 지급은 루프 뒤에 몰려 있어 하나도 안 나간다.
+  //   교사는 "모든 항목이 발송되었습니다 🎉"를 보고, 재발송 기본 경로는 !delivered만 고르므로 영영 스킵된다.
+  //   순서를 뒤집으면 실패 시 "지급됐는데 미표시"가 되고, 재발송이 nomKey/dalKey dedup으로
+  //   ts만 갱신하며 쿠키도 재차감하지 않는다 → 재시도가 안전한 방향.
+  const pendingMarks=[]; // {path,extra} — 발송 확정 후 delivered 표시할 노드들
+  const _mark=(path,extra)=>pendingMarks.push({path,extra});
   for(const n of approved_noms){
     const idx=findStu(n.to);
     if(idx<0) { _nomDebug.toMissing++; console.warn('[deliver] 받는 학생 못 찾음:', n.key, '→ to=', n.to); continue; }
@@ -3667,15 +4412,18 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
       // 재발송: 기존 event ts 갱신 → 학생 알림 다시 뜸
       const matched = byKey ? evList.find(ev=>ev&&ev.nomKey===n.key) : evList.find(ev=>ev&&!ev.nomKey&&ev.subtype===subtype);
       if(matched) matched.ts = Date.now();
-      await saengRef.child('nominations/'+n.key).update({delivered:true,delivered_at:Date.now()});
+      if(matched) _pushOp(idx,{type:'event',special:'goldenTicket',template:_invTpl(it),dedupField:byKey?'nomKey':null,dedupVal:byKey?n.key:null,legacySubtype:byKey?null:subtype,event:matched});
+      _mark('nominations/'+n.key);
       if(n.from) recipientCds.add(String(n.from).trim());
       // 재발송 카운트 (사용자가 재발송 선택한 경우 표시용)
       nT++;
       if(subtype==='defender') nT_def++; else nT_pro++;
       continue;
     }
-    it.events.push({ts:Date.now(),nomKey:n.key,fromCd:'',fromName:'익명',reason:n.reason||'',subtype});
-    await saengRef.child('nominations/'+n.key).update({delivered:true,delivered_at:Date.now()});
+    const _nomEv={ts:Date.now(),nomKey:n.key,fromCd:'',fromName:'익명',reason:n.reason||'',subtype};
+    it.events.push(_nomEv);
+    _pushOp(idx,{type:'event',special:'goldenTicket',template:_invTpl(it),dedupField:'nomKey',dedupVal:n.key,event:_nomEv});
+    _mark('nominations/'+n.key);
     if(n.from) recipientCds.add(String(n.from).trim());
     nT++;
     if(subtype==='defender'){nT_def++;_nomDebug.pushedDef++;}
@@ -3696,10 +4444,20 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
     if(existingDal){
       console.warn('[달고나] 이미 발송된 항목 — 재발송 모드로 ts만 갱신 (쿠키 차감/수라상 부여 스킵)', d.key);
       existingDal.ts = ts;
-      await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
+      _pushOp(idx,{type:'event',special:'dalgona',template:_invTpl(it),dedupField:'dalKey',dedupVal:d.key,event:existingDal});
+      _mark('dalgona/'+d.key);
       if(d.from) recipientCds.add(String(d.from).trim());
       nD++;
       continue;
+    }
+    // 잔액 부족 시 간식 달고나 발송 차단 — 미발송 유지(쿠키 충전 후 재발송 가능)
+    if(d.gift==='cookie'){
+      const _fromIdx=findStu(d.from);
+      if(_fromIdx>=0 && (senderCookieAvail[_fromIdx]||0) < 5){
+        blockedDals.push({fromName:d.from_name||d.from,toName:getStudentName(d.to)||d.to});
+        console.warn('[간식] 잔액 부족으로 발송 차단', d.key, 'avail=', senderCookieAvail[_fromIdx]);
+        continue;
+      }
     }
     let drawingId='';
     // 우선순위: drawingRef(student_{cd}_{month}) → drawing(레거시 base64)
@@ -3717,7 +4475,9 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
       }
       if(drawingData) await firebase.database().ref('ClassData/EventShop/drawings/'+drawingId).set(drawingData);
     }
-    it.events.push({ts,dalKey:d.key,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId});
+    const _dalEv={ts,dalKey:d.key,fromCd:d.from||'',fromName:d.from_name||'',message:d.message||'',gift:d.gift||'cookie',heartText:d.gift_heart||'',etcText:d.gift_etc||'',drawingId};
+    it.events.push(_dalEv);
+    _pushOp(idx,{type:'event',special:'dalgona',template:_invTpl(it),dedupField:'dalKey',dedupVal:d.key,event:_dalEv});
     console.log('[달고나 발송]', {dalKey:d.key, from:d.from, to:d.to, gift:d.gift});
     // 간식: 보낸 학생 -5쿠키 + 받은 학생 가방에 왕의 수라상 +1 (자동)
     if(d.gift==='cookie'){
@@ -3725,6 +4485,7 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
       console.log('[간식] fromIdx=', fromIdx, 'from=', d.from);
       if(fromIdx>=0){
         senderShopUsedAdd[fromIdx]=(senderShopUsedAdd[fromIdx]||0)+5;
+        senderCookieAvail[fromIdx]=(senderCookieAvail[fromIdx]||0)-5; // 남은 잔액 차감(다음 간식 가용성 판정용)
         console.log('[간식] senderShopUsedAdd 누적', senderShopUsedAdd);
       } else {
         console.warn('[간식] 보낸 학생을 찾지 못함 → 쿠키 차감 스킵');
@@ -3732,37 +4493,46 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
       const surangReg=findItmByName('왕의 수라상');
       const surangItem={n:surangReg?.n||'왕의 수라상',i:surangReg?.i||'🍱',st:'active',g:surangReg?.g||'C'};
       inv.push(surangItem);
+      _pushOp(idx,{type:'append',item:surangItem});
       console.log('[간식] 왕의수라상 push', surangItem, 'inv 길이=', inv.length);
     } else {
       console.log('[달고나] gift !== cookie → 차감/수라상 스킵', d.gift);
     }
-    await saengRef.child('dalgona/'+d.key).update({delivered:true,delivered_at:Date.now()});
+    // 배달본 그림 id를 달고나 노드에 남긴다. 이 id({ts}_{from}_{to})는 지금까지 수신자 가방 이벤트
+    //   안에만 있어서, 전체 초기화의 참조 수집(_refs)이 못 찾아 공유 EventShop/drawings에 영구 누적됐다
+    //   (재발송마다 ts가 달라 사본이 하나씩 더 쌓였다). 앞으로 배달되는 것부터 정리 대상이 된다.
+    _mark('dalgona/'+d.key, drawingId?{delivered_drawing_id:drawingId}:null);
     if(d.from) recipientCds.add(String(d.from).trim());
     nD++;
   }
-  // 작성 학생들의 records에 record_delivered_at 기록 + student_viewed_at 초기화 (확인 판정 기준)
+  // 변경된 학생 key 모음 — 이벤트 상점의 updatedAt 증분 동기화가 감지하도록 끝에 updatedAt 갱신
+  const touchedKeys=new Set();
+  // 학생별 inv 저장 — 트랜잭션으로 최신 서버 inv에 추가분(ops)만 재적용 (발송 중 학생 구매/사용 덮어쓰기 방지)
+  for(const [idx,ops] of Object.entries(invOps)){
+    if(!ops||!ops.length) continue;
+    const key=stuKeys[idx];
+    await shopRef.child('stu/'+key+'/inv').transaction(cur=>_mergeInvOps(cur,ops));
+    touchedKeys.add(key);
+  }
+  // 보낸 학생들의 shopUsed 누적 적용 — 원자적 increment (동시 이벤트 상점 차감을 덮어쓰지 않음)
+  console.log('[shopUsed 적용] senderShopUsedAdd=', senderShopUsedAdd);
+  for(const [fromIdx,addAmt] of Object.entries(senderShopUsedAdd)){
+    const key=stuKeys[fromIdx];
+    await shopRef.child('stu/'+key+'/shopUsed').set(firebase.database.ServerValue.increment(addAmt));
+    touchedKeys.add(key);
+    console.log('[shopUsed] 학생 key=', key, '원자 증가=', addAmt);
+  }
+  // ── 여기까지 왔으면 지급이 실제로 끝났다 → 이제서야 delivered 표시 ──
   const deliveryTs=Date.now();
+  for(const {path,extra} of pendingMarks){
+    await saengRef.child(path).update({delivered:true,delivered_at:deliveryTs,...(extra||{})});
+  }
+  // 작성 학생들의 records에 record_delivered_at 기록 + student_viewed_at 초기화 (확인 판정 기준)
+  //   이것도 지급 뒤로 옮겼다 — 앞에 있으면 지급이 실패했는데 학생 기록만 수정 잠김이 된다.
   console.log('[deliver] recipientCds(작성자) =', [...recipientCds]);
   for(const cd of recipientCds){
     await saengRef.child('records/'+month+'/'+cd).update({record_delivered_at:deliveryTs, student_viewed_at:0});
     console.log('[deliver] record_delivered_at 갱신:', month+'/'+cd);
-  }
-  // 변경된 학생 key 모음 — 이벤트 상점의 updatedAt 증분 동기화가 감지하도록 끝에 updatedAt 갱신
-  const touchedKeys=new Set();
-  // 학생별 inv 저장
-  for(const [idx,inv] of Object.entries(dirtyInvs)){
-    await shopRef.child('stu/'+stuKeys[idx]+'/inv').set(inv);
-    touchedKeys.add(stuKeys[idx]);
-  }
-  // 보낸 학생들의 shopUsed 누적 적용
-  console.log('[shopUsed 적용] senderShopUsedAdd=', senderShopUsedAdd);
-  for(const [fromIdx,addAmt] of Object.entries(senderShopUsedAdd)){
-    const key=stuKeys[fromIdx];
-    const snap=await shopRef.child('stu/'+key+'/shopUsed').once('value');
-    const cur=snap.val()||0;
-    await shopRef.child('stu/'+key+'/shopUsed').set(cur+addAmt);
-    touchedKeys.add(key);
-    console.log('[shopUsed] 학생 key=', key, '이전=', cur, '추가=', addAmt, '→', cur+addAmt);
   }
   // updatedAt 갱신(맨 마지막) → 이벤트 상점 증분 리스너가 inv 변경을 수신
   for(const key of touchedKeys){
@@ -3780,6 +4550,7 @@ async function _doDelivery({month,filterCd,allowReDeliver,silent}){
           🎫 골든티켓 <b>${nT}</b>건 (방어자 ${nT_def}, 유망주 ${nT_pro})<br>
           🍯 달고나 <b>${nD}</b>건
           ${_nomDebug.already>0?`<br><span style="color:#888;font-size:12px;">ℹ️ 그중 ${_nomDebug.already}건은 재발송 (학생 가방 중복 없이 알림만 다시 발송)</span>`:''}
+          ${blockedDals.length>0?`<br><span style="color:#E53935;font-size:12px;">🚫 쿠키 부족으로 미발송 간식 <b>${blockedDals.length}</b>건: ${blockedDals.map(b=>b.fromName+'→'+b.toName).join(', ')} (충전 후 재발송 가능)</span>`:''}
         </div>
         <details style="margin-bottom:14px;font-size:11px;color:#888;">
           <summary style="cursor:pointer;">자세한 nomination 처리 결과</summary>
@@ -3807,6 +4578,13 @@ window.addEventListener('load',()=>{
   // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
   shopRef.child('stu').once('value',snap=>{
     const rawStu=snap.val();
+    // cd → Firebase 원래 key 매핑을 여기서 만들어 둔다. 이 부팅 시 1회 읽기로 이미 다 받았으므로
+    //   공짜다. 이게 없으면 쿠키 잔액 하나 보려고 stu 전체 노드를 다시 받아야 한다(제출할 때마다).
+    const _rawEntries=Array.isArray(rawStu)
+      ? rawStu.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
+      : Object.entries(rawStu||{});
+    _shopKeyByCd={};
+    _rawEntries.forEach(([k,v])=>{ if(v&&v.cd!=null&&_shopKeyByCd[String(v.cd).trim()]===undefined) _shopKeyByCd[String(v.cd).trim()]=k; });
     const stuArrRaw=Array.isArray(rawStu)?rawStu:(rawStu&&typeof rawStu==='object'?Object.values(rawStu):[]);
     // cd 기준 중복 제거 — Firebase에 정수키/ cd키가 공존하면 같은 학생이 두 번 들어와 화면이 2배로 보이는 문제 방지
     const _seenCd=new Set();
