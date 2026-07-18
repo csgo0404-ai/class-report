@@ -1655,6 +1655,7 @@ function buildStudentSelects(){
 
 // ═══ 자동저장 (로컬+Firebase 디바운스) ═══
 let autoSaveTimer=null;
+let _draftBackupWarned=false; // 글 자동저장 쿼터초과 안내 1회 제한(매 입력마다 스팸 방지)
 function autoSave(){
   if(!me||formLocked) return;
   _formEditingDirty=true; // 입력 발생 — 리스너의 fillForm이 입력칸을 덮어쓰지 않도록
@@ -1675,7 +1676,15 @@ function autoSave(){
   }
   // full: 이 draft가 "완전한 의도"인지 표식. 서버로 폼이 한 번이라도 채워진 뒤(_formFilledOnce)의 편집이면
   //   빈 필드=의도적 삭제로 신뢰한다. 서버 로드 전(fresh tablet 부분 입력)이면 full=false라 병합이 서버를 보호한다.
-  try{localStorage.setItem('sw_draft_'+me.cd+'_'+currentMonth,JSON.stringify({...draft,updated_at:Date.now(),full:_serverReconciled}));}catch(e){}
+  // 크래시-복구용 로컬 백업. ★ 미제출 글은 이 태블릿에만 존재할 수 있으므로, 쿼터 초과 시에도
+  //   다른 draft를 함부로 지우지 않는다(자동 삭제로 미제출 작업을 날릴 위험 제거). 제출된 달의
+  //   draft는 제출 성공 시점(saveRecord 제출 경로의 removeItem)에 비우므로 애초에 쌓여 공간을 잠식하지 않는다.
+  //   현재 월 저장이 실패하면 무음 유실 대신 1회 안내(그림 경로 _writeCanvasDraft와 대칭).
+  const _dkey='sw_draft_'+me.cd+'_'+currentMonth;
+  try{ localStorage.setItem(_dkey,JSON.stringify({...draft,updated_at:Date.now(),full:_serverReconciled})); _draftBackupWarned=false; }
+  catch(e){
+    if(!_draftBackupWarned){ _draftBackupWarned=true; try{ toast('⚠️ 저장공간이 가득 차 글이 백업되지 않아요 — 지금 💾 임시저장 하세요'); }catch(_){} }
+  }
 }
 
 function collectFormData(status){
@@ -2219,10 +2228,13 @@ async function saveRecord(status='draft'){
   _formEditingDirty=false;
   _rejectionConfirmed=false; // 재제출 후 다음 반려도 알림창이 뜨도록
   try{ localStorage.removeItem('sw_rejConfirmed_'+_cd+'_'+_mo); }catch(e){}
-  // 학생 경로에서 유일하게 try가 없던 setItem이었다. 쿼터가 꽉 차면 여기서 throw해
-  //   레코드는 이미 submitted인데 방어자/유망주/달고나가 안 써지고, doFinalSubmit의 catch가
-  //   "제출하지 못했어요"라는 거짓 안내를 띄웠다. 로컬 캐시 실패가 제출을 끊으면 안 된다.
-  try{ localStorage.setItem('sw_draft_'+_cd+'_'+_mo,JSON.stringify({...data,updated_at:Date.now(),full:true})); }catch(e){ console.warn('[submit] 로컬 draft 저장 실패(무시)',e); }
+  // 제출 성공(위 record write가 서버에 확정됨) → 로컬 draft는 서버의 중복 미러일 뿐이므로 비운다.
+  //   ⓐ 제출된 달의 stale draft가 태블릿에 쌓여 쿼터를 잠식하고, '미제출 draft'를 위한 공간을
+  //     뺏는 것을 막는다(제출된 달은 로컬에 안 남김 → autoSave가 미제출 글을 지울 이유도 사라짐).
+  //   ⓑ 재접속 시 폼은 서버 레코드(sw_lastRecord+리스너)로 채워지므로 손실 없음.
+  //   ⓒ 반려 후 재편집은 autoSave가 새 draft를 다시 만든다.
+  //   캔버스 백업(sw_canvas_*)은 위 2236에서 이미 서버 확정 시 삭제하므로 여기선 텍스트만.
+  try{ localStorage.removeItem('sw_draft_'+_cd+'_'+_mo); }catch(e){ console.warn('[submit] 로컬 draft 삭제 실패(무시)',e); }
   // 추천/달고나는 레코드에서 파생되는 데이터다 — 없으면 교사의 승인(개별/일괄)과 발송 직전 루프가
   //   ensureNominationsAndDalgonaForRecord로 레코드에서 다시 만들고 autoApproveRelated로 승격까지 한다.
   //   그러니 여기서 실패해도 제출 자체를 실패로 되돌리면 안 된다(레코드가 정본이고 이미 써졌다).
