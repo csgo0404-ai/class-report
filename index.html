@@ -2410,9 +2410,13 @@ async function submitRecord(){
         myStu=stuArr.find(s=>s && String(s.cd).trim()===String(me.cd).trim());
       }
       if(myStu){
-        const avail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
+        // 🎫 상점이용권 + 🍪 월요쿠키 + 🍪 쿠키 합산(발송 시 이용권·월요쿠키가 우선 차감된다)
+        const cookieAvail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
+        const passAvail = _countUsable(myStu.inv, _isUsablePass);
+        const mondayAvail = _countUsable(myStu.inv, _isUsableMonday);
+        const avail = cookieAvail + passAvail + mondayAvail;
         if(avail < 5){
-          showSubmitErrorModal([`🍪 쿠키가 부족해요! (보유 ${Math.max(0,avail)}개 / 필요 5개)\n달고나 간식 대신 다른 선물을 선택해주세요.`]);
+          showSubmitErrorModal([`🍪 잔액이 부족해요! (보유 쿠키 ${Math.max(0,cookieAvail)} + 🎫이용권 ${passAvail} + 🍪월요쿠키 ${mondayAvail} / 필요 5개)\n달고나 간식 대신 다른 선물을 선택해주세요.`]);
           return;
         }
       }
@@ -2879,6 +2883,15 @@ function loadCanvasFromData(dataUrl){
 //   부르면 _formEditingDirty가 서고 로컬 draft가 항상 서버보다 새 타임스탬프를 갖게 돼
 //   stale draft가 영구히 우선하는 버그가 된다. 사용자 클릭일 때만 저장한다.
 function selectGift(type,el,fromFill){
+  // 🍪 간식(쿠키)을 학생이 직접 고르면 — 결제 미리보기 창을 먼저 띄운다(자동 차감 내역 확인).
+  //   실제 차감은 이용권>월요쿠키>쿠키 우선순위 자동(발송 시점). fromFill(복원)은 창 없이 상태만.
+  if(!fromFill && type==='cookie' && me){
+    openDalgonaPayPreview(el);
+    return;
+  }
+  _applyGift(type,el,fromFill);
+}
+function _applyGift(type,el,fromFill){
   currentGift=type;
   // 학생이 직접 고른 것인지 기록한다. 선물은 기본값('마음')과 학생 선택이 같은 값일 수 있어
   //   다른 칸처럼 "값이 있으면 학생 것"으로 판정할 수 없다 — 명시적으로 '마음'을 고른 학생의
@@ -2887,6 +2900,74 @@ function selectGift(type,el,fromFill){
   document.querySelectorAll('.gift-option').forEach(o=>o.classList.remove('selected'));
   if(el) el.classList.add('selected');
   if(!fromFill) autoSave(); // 선물 선택이 마지막 동작이면 저장 안 돼 사라지던 문제
+}
+// 🍪 간식 결제 미리보기 — 5개를 🎫상점이용권 > 🍪월요쿠키 > 🍪쿠키 순으로 자동 차감할 때 각 몇 개씩 빠지는지 표시.
+//   조정 불가(읽기 전용). 확인 시 간식으로 확정, 취소 시 선물 선택 유지(변경 안 함).
+async function openDalgonaPayPreview(el){
+  const COST=5;
+  document.getElementById('_dalPayModal')?.remove();
+  document.body.insertAdjacentHTML('beforeend', `
+  <div id="_dalPayModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;font-family:'Jua',sans-serif;">
+    <div style="background:#FFF8EC;border:3px solid #FFCA28;border-radius:24px;padding:26px 24px 20px;max-width:340px;width:100%;box-shadow:0 16px 44px rgba(0,0,0,0.35);text-align:center;">
+      <div style="font-size:46px;margin-bottom:6px;">🍪</div>
+      <div style="font-size:20px;font-weight:800;color:#5D4037;margin-bottom:4px;">간식 달고나 보내기</div>
+      <div style="font-size:15px;color:#8D6E63;margin-bottom:14px;">필요 비용 <b style="color:#E65100;font-size:19px;">${COST}</b> 🍪</div>
+      <div id="_dalPayBody" style="font-size:14px;color:#5D4037;">잔액 확인 중…</div>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button id="_dalPayCancel" style="flex:1;padding:12px;border:none;border-radius:14px;background:#ECEFF1;color:#78909C;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;">취소</button>
+        <button id="_dalPayOk" disabled style="flex:1.4;padding:12px;border:none;border-radius:14px;background:#CFD8DC;color:#fff;font-family:inherit;font-size:15px;font-weight:800;cursor:not-allowed;">확인 중…</button>
+      </div>
+    </div>
+  </div>`);
+  const modal=document.getElementById('_dalPayModal');
+  const close=()=>{ modal?.remove(); };
+  modal.addEventListener('click',e=>{ if(e.target===modal) close(); });
+  document.getElementById('_dalPayCancel').onclick=close;
+
+  // 최신 잔액 조회 (제출 검사와 동일 경로 — 본인 노드만)
+  let myStu=null;
+  try{
+    const _k=_shopKeyByCd[String(me.cd).trim()];
+    if(_k!==undefined){ myStu=(await shopRef.child('stu/'+_k).once('value')).val(); }
+    else{ let arr=(await shopRef.child('stu').once('value')).val()||[]; if(!Array.isArray(arr)) arr=Object.values(arr); myStu=arr.find(s=>s&&String(s.cd).trim()===String(me.cd).trim()); }
+  }catch(e){ myStu=me; } // 조회 실패 시 부팅 스냅샷으로 폴백
+  if(!document.getElementById('_dalPayModal')) return; // 그새 닫힘
+
+  const s=myStu||me||{};
+  const cookieAvail=Math.max(0,(s.cookie||0)-(s.usedCookie||0)-(s.shopUsed||0));
+  const passCount=_countUsable(s.inv,_isUsablePass);
+  const mondayCount=_countUsable(s.inv,_isUsableMonday);
+  const total=cookieAvail+passCount+mondayCount;
+  // 우선순위 자동 차감: 이용권 → 월요쿠키 → 쿠키
+  const passUse=Math.min(COST,passCount);
+  const mondayUse=Math.min(COST-passUse,mondayCount);
+  const cookieUse=Math.max(0,COST-passUse-mondayUse);
+  const affordable=total>=COST;
+
+  const line=(emo,label,use,have)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;${use>0?'':'opacity:0.4;'}">
+      <span>${emo} ${label} <span style="font-size:11px;color:#A1887F;">(보유 ${have})</span></span>
+      <span style="font-weight:800;color:${use>0?'#E65100':'#B0BEC5'};">${use}개</span></div>`;
+  const body=document.getElementById('_dalPayBody');
+  if(affordable){
+    body.innerHTML=`
+      <div style="background:#FFF3E0;border-radius:14px;padding:10px 14px;text-align:left;border:1.5px solid #FFE0B2;">
+        ${passCount>0?line('🎫','상점 이용권',passUse,passCount):''}
+        ${mondayCount>0?line('🍪','월요 쿠키',mondayUse,mondayCount):''}
+        ${line('🍪','쿠키',cookieUse,cookieAvail)}
+      </div>`;
+    const ok=document.getElementById('_dalPayOk');
+    ok.disabled=false; ok.textContent='이 선물로 결정';
+    ok.style.background='linear-gradient(135deg,#FF9800,#FB8C00)'; ok.style.cursor='pointer';
+    ok.onclick=()=>{ close(); _applyGift('cookie',el); };
+  } else {
+    body.innerHTML=`
+      <div style="background:#FFEBEE;border-radius:14px;padding:12px 14px;font-size:14px;color:#C62828;font-weight:700;">
+        잔액이 부족해요! 🥲<br>
+        <span style="font-size:12px;font-weight:400;color:#8D6E63;">보유: 🍪쿠키 ${cookieAvail} · 🎫이용권 ${passCount} · 🍪월요쿠키 ${mondayCount} (합 ${total} / 필요 ${COST})</span>
+      </div>`;
+    const ok=document.getElementById('_dalPayOk');
+    ok.textContent='부족'; ok.disabled=true; ok.style.background='#CFD8DC'; ok.style.cursor='not-allowed'; ok.onclick=null;
+  }
 }
 
 // ═══ 부저 (학생) ═══
@@ -4193,10 +4274,25 @@ function _filterMonthInv(cur,val){
     return {...it,events:filtered};
   }).filter(it=>it!==null);
 }
+// 🎫 상점 이용권 / 🍪 월요 쿠키 — EventShop과 동일 술어(잠금·소모 제외). 달고나 간식 결제에 1:1 사용.
+const _isUsablePass=it=>!!(it&&it.n==='상점 이용권'&&(it.st==='active'||it.st==='new')&&!it.locked);
+const _isUsableMonday=it=>!!(it&&it.n==='월요 쿠키'&&!it.locked&&!it.reqDone&&(it.st==='active'||it.st==='new'||it.type==='cookie_req'));
+const _countUsable=(inv,pred)=>{const a=Array.isArray(inv)?inv:(inv?Object.values(inv).filter(Boolean):[]);return a.filter(pred).length;};
 function _mergeInvOps(cur,ops){
   const arr=_normInv(cur);
   for(const op of ops){
     if(op.type==='append'){arr.push(op.item);continue;}
+    // op.type==='consume' — 최신 서버 inv에서 상점이용권/월요쿠키를 count개만큼 소모 표시(발송 중 학생 사용 덮어쓰기 방지).
+    //   월요 쿠키는 st만 바꾸면 type==='cookie_req'가 여전히 usable로 잡혀 이중지급 → reqDone=true로 은퇴시킨다.
+    if(op.type==='consume'){
+      let need=op.count||0;
+      for(const it of arr){
+        if(need<=0) break;
+        if(op.kind==='pass' && _isUsablePass(it)){ it.st='used'; need--; }
+        else if(op.kind==='monday' && _isUsableMonday(it)){ it.reqDone=true; it.st='used'; need--; }
+      }
+      continue;
+    }
     // op.type==='event' — special 아이템(goldenTicket/dalgona)에 이벤트 추가/ts갱신
     let it=arr.find(x=>x&&x.special===op.special);
     if(!it){it={...op.template,events:[]};arr.push(it);}
@@ -4374,24 +4470,27 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     senderCookieReq[fIdx]=(senderCookieReq[fIdx]||0)+5;
   });
   console.log('[쿠키검사] senderCookieReq=', senderCookieReq);
+  // 보낸 학생별 결제수단 잔액 — 🎫 상점이용권 + 🍪 월요쿠키 + 🍪 쿠키(1:1). 이용권·월요쿠키가 우선 차감된다.
+  //   pass/monday는 원본 보유수(불변, 사후 배분용), avail은 발송 중 depletion 추적용(블록 판정).
+  const senderPay={};
+  Object.keys(senderCookieReq).forEach(idx=>{
+    const s=stu[idx];
+    const cookie=s?Math.max(0,(s.cookie||0)-(s.usedCookie||0)-(s.shopUsed||0)):0;
+    const pass=s?_countUsable(s.inv,_isUsablePass):0;
+    const monday=s?_countUsable(s.inv,_isUsableMonday):0;
+    senderPay[idx]={cookie,pass,monday,avail:cookie+pass+monday};
+  });
   const shortfalls=[];
   Object.entries(senderCookieReq).forEach(([idx,req])=>{
     const s=stu[idx]; if(!s) return;
-    const total=(s.cookie||0)-(s.usedCookie||0);
-    const avail=total-(s.shopUsed||0);
-    console.log('[쿠키검사]', s.nm, 'cookie=',s.cookie,'used=',s.usedCookie,'shop=',s.shopUsed,'avail=',avail,'req=',req);
-    if(avail<req) shortfalls.push({nm:s.nm,no:s.no,avail:Math.max(0,avail),req,short:req-avail});
+    const p=senderPay[idx];
+    console.log('[쿠키검사]', s.nm, 'cookie=',p.cookie,'pass=',p.pass,'monday=',p.monday,'avail=',p.avail,'req=',req);
+    if(p.avail<req) shortfalls.push({nm:s.nm,no:s.no,avail:p.avail,req,short:req-p.avail});
   });
   console.log('[쿠키검사] shortfalls=', shortfalls);
-  // 보낸 학생별 사용 가능 쿠키 잔액 — 발송 중 5개 미만이면 간식 달고나를 발송하지 않음
-  const senderCookieAvail={};
-  Object.keys(senderCookieReq).forEach(idx=>{
-    const s=stu[idx];
-    senderCookieAvail[idx]=s?Math.max(0,(s.cookie||0)-(s.usedCookie||0)-(s.shopUsed||0)):0;
-  });
   if(shortfalls.length && !silent){
-    const list=shortfalls.map(s=>`<li>${s.no?s.no+'번 ':''}<b>${s.nm}</b> — 보유 ${s.avail}🍪 / 필요 ${s.req}🍪 <span style="color:#E53935;">(${s.short}개 부족)</span></li>`).join('');
-    const ok=await prettyConfirm({title:'쿠키 부족 ⚠️',icon:'🍪',body:`다음 학생들은 쿠키가 모자라 <b>간식 달고나가 발송되지 않아요</b>:<br><ul style="text-align:left;font-size:13px;line-height:1.7;margin:10px 0;padding-left:22px;">${list}</ul>부족한 간식만 제외하고 나머지를 발송할까요?<br><span style="font-size:12px;color:#999;">(제외된 간식은 쿠키 충전 후 다시 발송할 수 있어요)</span>`,okText:'나머지 발송',cancelText:'취소'});
+    const list=shortfalls.map(s=>`<li>${s.no?s.no+'번 ':''}<b>${s.nm}</b> — 보유 ${s.avail}(🍪+🎫) / 필요 ${s.req} <span style="color:#E53935;">(${s.short}개 부족)</span></li>`).join('');
+    const ok=await prettyConfirm({title:'잔액 부족 ⚠️',icon:'🍪',body:`다음 학생들은 쿠키·상점이용권·월요쿠키를 합쳐도 모자라 <b>간식 달고나가 발송되지 않아요</b>:<br><ul style="text-align:left;font-size:13px;line-height:1.7;margin:10px 0;padding-left:22px;">${list}</ul>부족한 간식만 제외하고 나머지를 발송할까요?<br><span style="font-size:12px;color:#999;">(제외된 간식은 충전 후 다시 발송할 수 있어요)</span>`,okText:'나머지 발송',cancelText:'취소'});
     if(!ok) return {nT:0,nD:0,reSent:false};
   }
   let nT=0,nD=0,nT_def=0,nT_pro=0;
@@ -4442,8 +4541,9 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     else {nT_pro++;_nomDebug.pushedPro++;}
   }
   console.log('[deliver] nominations 처리 결과:', _nomDebug, 'approved_noms types=', approved_noms.map(n=>n.type||(n.key&&n.key.split('_').pop())));
-  // 보낸 학생들의 shopUsed 누적
-  const senderShopUsedAdd={};
+  // 보낸 학생들의 간식 결제 — 총 비용(달고나수×5)을 학생별로 모은 뒤, 루프 후 이용권→월요쿠키→쿠키 순으로 배분.
+  const senderShopUsedAdd={}; // 쿠키(shopUsed)로 낼 몫 — 루프 후 배분 단계에서 채운다
+  const senderCostTotal={};   // 학생별 총 간식 비용(1:1 결제단위)
   for(const d of approved_dals){
     const idx=findStu(d.to);
     if(idx<0) continue;
@@ -4465,9 +4565,9 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     // 잔액 부족 시 간식 달고나 발송 차단 — 미발송 유지(쿠키 충전 후 재발송 가능)
     if(d.gift==='cookie'){
       const _fromIdx=findStu(d.from);
-      if(_fromIdx>=0 && (senderCookieAvail[_fromIdx]||0) < 5){
+      if(_fromIdx>=0 && ((senderPay[_fromIdx]&&senderPay[_fromIdx].avail)||0) < 5){
         blockedDals.push({fromName:d.from_name||d.from,toName:getStudentName(d.to)||d.to});
-        console.warn('[간식] 잔액 부족으로 발송 차단', d.key, 'avail=', senderCookieAvail[_fromIdx]);
+        console.warn('[간식] 잔액 부족으로 발송 차단', d.key, 'avail=', senderPay[_fromIdx]&&senderPay[_fromIdx].avail);
         continue;
       }
     }
@@ -4496,11 +4596,11 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
       const fromIdx=findStu(d.from);
       console.log('[간식] fromIdx=', fromIdx, 'from=', d.from);
       if(fromIdx>=0){
-        senderShopUsedAdd[fromIdx]=(senderShopUsedAdd[fromIdx]||0)+5;
-        senderCookieAvail[fromIdx]=(senderCookieAvail[fromIdx]||0)-5; // 남은 잔액 차감(다음 간식 가용성 판정용)
-        console.log('[간식] senderShopUsedAdd 누적', senderShopUsedAdd);
+        senderCostTotal[fromIdx]=(senderCostTotal[fromIdx]||0)+5;
+        if(senderPay[fromIdx]) senderPay[fromIdx].avail-=5; // 남은 결제잔액 차감(다음 간식 가용성 판정용)
+        console.log('[간식] senderCostTotal 누적', senderCostTotal);
       } else {
-        console.warn('[간식] 보낸 학생을 찾지 못함 → 쿠키 차감 스킵');
+        console.warn('[간식] 보낸 학생을 찾지 못함 → 결제 차감 스킵');
       }
       const surangReg=findItmByName('왕의 수라상');
       const surangItem={n:surangReg?.n||'왕의 수라상',i:surangReg?.i||'🍱',st:'active',g:surangReg?.g||'C'};
@@ -4516,6 +4616,18 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     _mark('dalgona/'+d.key, drawingId?{delivered_drawing_id:drawingId}:null);
     if(d.from) recipientCds.add(String(d.from).trim());
     nD++;
+  }
+  // 간식 결제 배분 — 학생별 총 비용을 🎫상점이용권 → 🍪월요쿠키 → 🍪쿠키 순으로 차감(이용권·월요쿠키 우선).
+  //   pass/monday는 sender inv 트랜잭션에서 consume op로 소모(발송 중 학생 사용 덮어쓰기 방지), 나머지만 shopUsed increment.
+  for(const [fromIdx,cost] of Object.entries(senderCostTotal)){
+    const pay=senderPay[fromIdx]||{pass:0,monday:0};
+    const passUse=Math.min(cost, pay.pass||0);
+    const mondayUse=Math.min(cost-passUse, pay.monday||0);
+    const cookieUse=cost-passUse-mondayUse;
+    if(passUse>0) _pushOp(fromIdx,{type:'consume',kind:'pass',count:passUse});
+    if(mondayUse>0) _pushOp(fromIdx,{type:'consume',kind:'monday',count:mondayUse});
+    if(cookieUse>0) senderShopUsedAdd[fromIdx]=cookieUse;
+    console.log('[간식결제] idx=',fromIdx,'cost=',cost,'→ 이용권',passUse,'월요쿠키',mondayUse,'쿠키',cookieUse);
   }
   // 변경된 학생 key 모음 — 이벤트 상점의 updatedAt 증분 동기화가 감지하도록 끝에 updatedAt 갱신
   const touchedKeys=new Set();
