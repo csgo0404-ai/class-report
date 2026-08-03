@@ -2399,16 +2399,7 @@ async function submitRecord(){
       // 본인 노드만 읽는다. 예전엔 stu 전체 노드(전교생 inv, 월마다 누적)를 받아 본인 것 하나를
       //   골라 썼다 — 마감 직전 30명이 동시에 제출하면 부팅 때와 맞먹는 다운로드가 한 번 더 몰렸고,
       //   검증에 걸려 다시 누를 때마다 또 받았다. 필요한 건 필드 3개뿐이다.
-      const _k=_shopKeyByCd[String(me.cd).trim()];
-      let myStu=null;
-      if(_k!==undefined){
-        myStu=(await shopRef.child('stu/'+_k).once('value')).val();
-      } else {
-        // 매핑 미확보(부팅 스냅샷 이후 추가된 학생 등) → 옛 경로로 폴백
-        let stuArr=(await shopRef.child('stu').once('value')).val()||[];
-        if(!Array.isArray(stuArr)) stuArr=Object.values(stuArr);
-        myStu=stuArr.find(s=>s && String(s.cd).trim()===String(me.cd).trim());
-      }
+      const myStu = await _fetchMyStu();
       if(myStu){
         // 🎫 상점이용권 + 🍪 월요쿠키 + 🍪 쿠키 합산(발송 시 이용권·월요쿠키가 우선 차감된다)
         const cookieAvail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
@@ -2925,15 +2916,19 @@ async function openDalgonaPayPreview(el){
   document.getElementById('_dalPayCancel').onclick=close;
 
   // 최신 잔액 조회 (제출 검사와 동일 경로 — 본인 노드만)
-  let myStu=null;
-  try{
-    const _k=_shopKeyByCd[String(me.cd).trim()];
-    if(_k!==undefined){ myStu=(await shopRef.child('stu/'+_k).once('value')).val(); }
-    else{ let arr=(await shopRef.child('stu').once('value')).val()||[]; if(!Array.isArray(arr)) arr=Object.values(arr); myStu=arr.find(s=>s&&String(s.cd).trim()===String(me.cd).trim()); }
-  }catch(e){ myStu=me; } // 조회 실패 시 부팅 스냅샷으로 폴백
+  let myStu=null, _balErr=false;
+  try{ myStu = await _fetchMyStu(); }catch(e){ _balErr=true; }
+  if(myStu==null) _balErr=true;
   if(!document.getElementById('_dalPayModal')) return; // 그새 닫힘
+  if(_balErr){
+    // ⚠️ 예전엔 부팅 스냅샷(me)으로 폴백했는데, 경량 명단에는 cookie/inv 가 없어
+    //   잔액이 0으로 계산되고 멀유한 학생이 '잔액 부족'을 보게 된다. 추측하지 말고 안내한다.
+    alert('잠시 통신이 불안정해 잔액을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+    document.getElementById('_dalPayModal')?.remove();
+    return;
+  }
 
-  const s=myStu||me||{};
+  const s=myStu||{};
   const cookieAvail=Math.max(0,(s.cookie||0)-(s.usedCookie||0)-(s.shopUsed||0));
   const passCount=_countUsable(s.inv,_isUsablePass);
   const mondayCount=_countUsable(s.inv,_isUsableMonday);
@@ -3781,14 +3776,37 @@ async function _readRawStu(){
   if(migrated==null) migrated = entries.length>0 && entries.every(([k])=>isNaN(parseInt(k)));
   return {entries,migrated:!!migrated};
 }
-async function _addStudentKeyed(entries,migrated,nm,cd){
+// Firebase 경로 키로 쓸 수 없는 문자. 들어가면 multi-path update 가 통째로 throw 된다.
+function _badPathKey(k){ return /[.#$\[\]\/]/.test(String(k)); }
+/* 명단이 바뀐 뒤 경량 미러를 즉시 갱신한다. 안 하면 교사가 앱을 다시 열 때까지 학생 기기 명단에
+   삭제된 학생이 유령으로 남는다(신규 학생은 미러 미스 → 원본 폴백으로 구제되므로 문제 없다). */
+async function _refreshRoster(){
+  try{ const {entries}=await _readRawStu(); _syncRoster(entries, true); }catch(_){}
+}
+async function _addStudentKeyed(entries,migrated,nm,cd,no){
   // 추가할 Firebase 키 결정: cd키 모드면 cd, 레거시면 다음 정수 인덱스
   const key = migrated ? cd : String(entries.reduce((mx,[k])=>{const i=parseInt(k);return isNaN(i)?mx:Math.max(mx,i);},-1)+1);
   // ⚠️ .set() 금지 — EventShop stu는 여러 앱이 공유한다. 중복검사는 v.cd 필드 기준인데 쓰기는 키 기준이라
   //   두 기준이 어긋나는 노드(cd 필드 없거나 다른 앱이 만든 노드)가 이 키에 있으면 .set()이 inv·쿠키·bank·
   //   아바타를 통째로 날린다. update()는 이 세 필드만 병합하므로 기존 노드를 보존한다(새 학생이면 동일 생성).
-  await shopRef.child('stu/'+key).update({nm,cd,updatedAt:Date.now()});
-  entries.push([key,{nm,cd}]);
+  // ⚠️ 같은 이유로 multi-path 키를 'stu/{key}' 로 잡으면 안 된다(그건 whole-node set = 노드 파괴).
+  //   반드시 리프 단위로 쪼개서, 툼스톤 해제와 함께 한 번에 원자 적용한다.
+  // 재등록 시 stuDel 툼스톤 해제 필수 — 상점 _delH 는 updatedAt > 툼스톤ts 면 삭제를 건너뛰지만,
+  //   같은 ms 재추가·이벤트 도착 순서·기기 시계 스큐에서는 그 가드가 깨져 새 학생이 즉시 지워진다.
+  //   상점 자신의 등록 경로도 stuDel/{cd}=null 을 명시적으로 쓴다(같은 규약을 맞춘다).
+  const upd = {
+    ['stu/'+key+'/nm']        : nm,
+    ['stu/'+key+'/cd']        : cd,
+    ['stu/'+key+'/updatedAt'] : Date.now(),
+  };
+  // 번호(no) — 입력칸/일괄입력에 있는데 예전엔 버려졌다. 상점·명단 정렬이 no 기준이라
+  //   빠지면 신규 학생이 항상 맨 앞으로 온다.
+  const _no = (no==null || no==='') ? null : (Number(no) || null);
+  if(_no!=null) upd['stu/'+key+'/no'] = _no;
+  if(!_badPathKey(cd))  upd['stuDel/'+cd]  = null;
+  if(key!==cd && !_badPathKey(key)) upd['stuDel/'+key] = null;   // 레거시 정수키 모드의 키형 툼스톤
+  await shopRef.update(upd);
+  entries.push([key,{nm,cd,no:_no}]);
 }
 async function addStudent(){
   const nm=document.getElementById('addStuName').value.trim();
@@ -3796,12 +3814,14 @@ async function addStudent(){
   if(!nm||!cd) return alert('이름과 코드를 모두 입력하세요.');
   const {entries,migrated}=await _readRawStu();
   if(entries.some(([_,v])=>v&&String(v.cd).trim()===cd)) return alert('이미 존재하는 코드입니다.');
-  await _addStudentKeyed(entries,migrated,nm,cd);
-  shopData.stu=[...getStudentList(),{nm,cd}];
+  const _noVal=(document.getElementById('addStuNum').value||'').trim();
+  await _addStudentKeyed(entries,migrated,nm,cd,_noVal);
+  shopData.stu=[...getStudentList(),{nm,cd,no:(Number(_noVal)||null)}];
   document.getElementById('addStuNum').value='';
   document.getElementById('addStuName').value='';
   document.getElementById('addStuCode').value='';
   loadStuManage();
+  _refreshRoster();          // 학생 기기 명단에 즉시 반영
   toast('✅ 학생 추가 완료!');
 }
 async function bulkAddStudents(){
@@ -3813,20 +3833,22 @@ async function bulkAddStudents(){
   const toAdd=[]; let skipped=0;
   lines.forEach(line=>{
     let parts=line.split(/[\s,]+/).filter(p=>p);
-    let nm,cd;
-    if(parts.length>=3){[,nm,cd]=parts;} // 번호 이름 코드
+    let nm,cd,no=null;
+    if(parts.length>=3){[no,nm,cd]=parts;} // 번호 이름 코드
     else if(parts.length===2){[nm,cd]=parts;}
     else{skipped++;return;}
     if(!nm||!cd){skipped++;return;}
     cd=String(cd).trim();
     if(existing.has(cd)){skipped++;return;}
-    existing.add(cd); toAdd.push({nm,cd});
+    existing.add(cd); toAdd.push({nm,cd,no});
   });
   if(toAdd.length===0){alert(`추가된 학생이 없습니다.\n중복 또는 형식 오류: ${skipped}건`);return;}
-  for(const {nm,cd} of toAdd){ await _addStudentKeyed(entries,migrated,nm,cd); }
-  shopData.stu=[...getStudentList(),...toAdd];
+  for(const {nm,cd,no} of toAdd){ await _addStudentKeyed(entries,migrated,nm,cd,no); }
+  // 서버엔 no 를 숫자로 저장하므로 로컬 배열도 같은 타입으로 맞춘다(addStudent 와 대칭).
+  shopData.stu=[...getStudentList(),...toAdd.map(t=>({nm:t.nm, cd:t.cd, no:(Number(t.no)||null)}))];
   document.getElementById('bulkStuInput').value='';
   loadStuManage();
+  _refreshRoster();          // 학생 기기 명단에 즉시 반영
   toast(`✅ ${toAdd.length}명 추가 완료!${skipped?` (${skipped}건 건너뜀)`:''}`);
 }
 async function deleteStudent(idx){
@@ -3840,11 +3862,32 @@ async function deleteStudent(idx){
   if(!confirm(`정말 마지막 확인이에요.\n${target.nm} 학생의 쿠키와 가방을 되돌릴 수 없습니다.\n계속할까요?`)) return;
   // 전체 배열 .set 대신, cd로 실제 Firebase 키를 찾아 그 노드만 제거 (키 구조 보존)
   const {entries}=await _readRawStu();
-  const found=entries.find(([_,v])=>v&&String(v.cd).trim()===String(target.cd).trim());
-  if(found){ await shopRef.child('stu/'+found[0]).remove(); }
+  const delCd=String(target.cd).trim();   // 툼스톤 키는 반드시 trim본 — 상점 _delH 가 s.cd 와 정확히 비교한다
+  const found=entries.find(([_,v])=>v&&String(v.cd).trim()===delCd);
+  // 삭제는 remove() 만으로는 다른 기기에 전파되지 않는다. 이벤트 상점 교사 화면은 stu 를
+  //   orderByChild('updatedAt') 증분으로 받는데, '사라짐'은 updatedAt 변화로 관측할 수 없다.
+  //   → stuDel/{cd} 툼스톤이 유일한 전파 수단. 없으면 삭제 시점에 꺼져 있던 기기가
+  //   캐시에서 학생을 부활시키고 다음 저장 때 서버로 되쓴다. 미러(reqCnt/bankNotices/rank)도 함께 정리.
+  if(found){
+    const now=Date.now();
+    const upd={ ['stu/'+found[0]]:null, ['reqCnt/'+found[0]]:null };
+    // cd 가 Firebase 경로에 못 쓰는 문자를 담고 있으면 multi-path update 전체가 throw 되어
+    //   삭제 자체가 실패한다(기존 remove()엔 없던 실패 모드). 그럴 땐 cd 기반 키만 빼고 진행.
+    if(!_badPathKey(delCd)){
+      upd['stuDel/'+delCd]      = now;
+      upd['bankNotices/'+delCd] = null;
+      upd['rank/'+delCd]        = null;
+      // 레거시(정수 인덱스) 키 모드에서는 상점 _forcePurgeStudent 와 같이 키형 툼스톤도 함께 남긴다.
+      if(found[0]!==delCd && !_badPathKey(found[0])) upd['stuDel/'+found[0]] = now;
+    } else {
+      console.warn('[deleteStudent] cd에 경로 금지문자 — 툼스톤 생략(다른 기기에서 부활할 수 있음):', delCd);
+    }
+    await shopRef.update(upd);
+  }
   else { console.warn('[deleteStudent] cd로 Firebase 키를 못 찾음:', target.cd); }
   shopData.stu=stu.filter((_,i)=>i!==idx);
   loadStuManage();
+  _refreshRoster();          // 학생 기기 명단에서 즉시 사라지도록
   toast('🗑️ 학생 삭제 완료');
 }
 async function deleteMonthData(){
@@ -4640,11 +4683,29 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
   }
   // 보낸 학생들의 shopUsed 누적 적용 — 원자적 increment (동시 이벤트 상점 차감을 덮어쓰지 않음)
   console.log('[shopUsed 적용] senderShopUsedAdd=', senderShopUsedAdd);
+  // ⚠️ 무상한 increment 금지 — 사전 잔액검사(shortfalls)는 발송 '시작 시점' 스냅샷이라, 그 사이 학생이
+  //    이벤트 상점에서 쿠키를 쓰면 잔액이 음수가 된다. 키오스크 _deductGuarded 와 같이 상한을 걸고
+  //    트랜잭션으로 재확인한다(상한 초과면 abort → 그 학생만 차감 실패로 남기고 나머지는 정상 진행).
+  const _suFailed=[];
   for(const [fromIdx,addAmt] of Object.entries(senderShopUsedAdd)){
     const key=stuKeys[fromIdx];
-    await shopRef.child('stu/'+key+'/shopUsed').set(firebase.database.ServerValue.increment(addAmt));
+    const _s = stu[fromIdx]||{};
+    const _cap = Math.max(0, (_s.cookie||0)-(_s.usedCookie||0));   // shopUsed 가 넘을 수 없는 상한
+    let _ok=false;
+    try{
+      const _res = await shopRef.child('stu/'+key+'/shopUsed').transaction(cur=>{
+        const next=(cur||0)+addAmt;
+        if(addAmt>0 && next>_cap) return undefined;   // 초과 지출 = abort
+        return next;
+      });
+      _ok = !!(_res && _res.committed);
+    }catch(_){ _ok=false; }
+    if(!_ok){ _suFailed.push((_s.nm||key)); console.warn('[shopUsed] 상한 초과/실패로 미차감 — key=', key, 'add=', addAmt, 'cap=', _cap); continue; }
     touchedKeys.add(key);
     console.log('[shopUsed] 학생 key=', key, '원자 증가=', addAmt);
+  }
+  if(_suFailed.length && !silent){
+    alert('⚠️ 다음 학생은 발송 중 잔액이 부족해져 쿠키가 차감되지 않았어요:\n' + _suFailed.join(', ') + '\n(아이템은 지급됐으니 잔액 확인 후 조정해 주세요)');
   }
   // ── 여기까지 왔으면 지급이 실제로 끝났다 → 이제서야 delivered 표시 ──
   const deliveryTs=Date.now();
@@ -4697,8 +4758,74 @@ function toast(msg){
 }
 
 // ═══ 초기화 ═══
+/* 내 stu 레코드 1건만 조회. 매핑이 없으면 cd 인덱스로 단건 쿼리(.indexOn:["cd"]) —
+   예전처럼 stu 전체를 받으면 경량 명단 미러로 줄인 트래픽이 그 자리에서 다시 터진다. */
+async function _fetchMyStu(){
+  const c = String(me.cd).trim();
+  const k = _shopKeyByCd[c];
+  if(k!==undefined){
+    const v=(await shopRef.child('stu/'+k).once('value')).val();
+    if(v) return v;
+  }
+  for(const q of [c, (c!=='' && !isNaN(Number(c))) ? Number(c) : null]){
+    if(q===null) continue;
+    try{
+      const snap=await shopRef.child('stu').orderByChild('cd').equalTo(q).once('value');
+      let found=null, fk=null;
+      snap.forEach(ch=>{ if(found==null){ found=ch.val(); fk=ch.key; } });   // ⚠️ truthy 반환 금지(순회 중단)
+      if(found){ _shopKeyByCd[c]=fk; return found; }
+    }catch(_){ }
+  }
+  return null;
+}
+/* 경량 명단 미러(ClassData/Saengwal/roster) — {cd:{nm,no,k}}.
+   EventShop/stu 는 전교생 inv(가방)·아바타까지 담고 있어 매우 무겁다. 학생 기기는 명단(이름/번호/코드)과
+   본인 1건만 있으면 되는데, 예전엔 모든 기기가 부팅마다 전체를 받아 태블릿 30대면 O(N²) 트래픽이 됐다.
+   → 교사 기기가 stu 를 읽는 김에 이 미러를 갱신하고(해시 가드), 학생 기기는 미러만 읽는다.
+   미러는 어디까지나 파생 캐시다. 비어 있거나 내 코드가 없으면 원본 stu 로 폴백한다. */
+function _syncRoster(entries, allowEmpty){
+  try{
+    const r={};
+    entries.forEach(([k,v])=>{ if(v&&v.cd!=null){ const c=String(v.cd).trim(); if(c && r[c]===undefined) r[c]={nm:v.nm||c, no:(v.no!=null?v.no:null), k}; } });
+    // 빈 스냅샷으로 미러를 지우지 않는다(부분 로드 방어). 단 명단관리에서 삭제로 0명이 된
+    //   경우는 '진짜 비움'이므로 allowEmpty 로 명시해야 학생 기기의 유령 1명이 사라진다.
+    if(!Object.keys(r).length){
+      if(!allowEmpty) return;
+      window._rosterHash='{}';
+      saengRef.child('roster').remove().catch(()=>{});
+      return;
+    }
+    const h=JSON.stringify(r);
+    if(window._rosterHash===h) return;                      // 변경분만 기록
+    window._rosterHash=h;
+    saengRef.child('roster').set(r).catch(()=>{});
+  }catch(_){}
+}
 window.addEventListener('load',()=>{
   initCanvas();
+  const _isTch = !!localStorage.getItem('sw_teacher');
+  // 학생 기기: 경량 명단 미러 우선 시도 → 성공하면 EventShop/stu 전체를 받지 않는다.
+  if(!_isTch){
+    saengRef.child('roster').once('value').then(rs=>{
+      const r=rs.val();
+      if(!r || !Object.keys(r).length) return _bootFromStu();   // 미러 없음 → 원본 폴백
+      _shopKeyByCd={};
+      const arr=[];
+      Object.keys(r).forEach(c=>{ const v=r[c]||{}; if(v.k!=null) _shopKeyByCd[c]=v.k; arr.push({nm:v.nm||c, no:v.no, cd:c}); });
+      arr.sort((a,b)=>(Number(a.no)||0)-(Number(b.no)||0));   // no 가 문자열로 저장된 레코드도 있다
+      shopData={stu: arr};
+      const sc0=localStorage.getItem('sw_stuCode');
+      const u0=new URLSearchParams(window.location.search).get('stu');
+      // 미러에 내 코드가 없으면(방금 추가된 학생 등) 원본으로 폴백
+      if((u0 && !arr.some(s=>s.cd===u0)) || (!u0 && sc0 && !arr.some(s=>s.cd===sc0))) return _bootFromStu();
+      _bootRoute();
+    }).catch(()=>_bootFromStu());
+    return;
+  }
+  _bootFromStu();
+});
+// 원본 EventShop/stu 전체를 받아 부팅(교사, 또는 학생 폴백)
+function _bootFromStu(){
   // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
   shopRef.child('stu').once('value',snap=>{
     const rawStu=snap.val();
@@ -4719,22 +4846,28 @@ window.addEventListener('load',()=>{
       _seenCd.add(c); return true;
     });
     shopData={stu: stuArr};
-    // URL param ?stu=CODE 자동 로그인
-    const urlParams=new URLSearchParams(window.location.search);
-    const urlStu=urlParams.get('stu');
-    if(urlStu&&shopData.stu){
-      const stu=shopData.stu.find(s=>String(s.cd).trim()===urlStu);
-      if(stu){me=stu;localStorage.setItem('sw_stuCode',urlStu);showStudentApp();return;}
-    }
-    const tc=localStorage.getItem('sw_teacher');
-    const sc=localStorage.getItem('sw_stuCode');
-    if(tc){isTeacher=true;showTeacherApp();}
-    else if(sc&&shopData.stu){
-      const stu=shopData.stu.find(s=>String(s.cd).trim()===sc);
-      if(stu){me=stu;showStudentApp();}
-    }
+    // 미러는 교사 기기만 기록한다 — 학생 폴백 경로에서도 이 함수를 타므로, 다수가 동시 폴백하면 중복 write 가 된다.
+    if(localStorage.getItem('sw_teacher')) _syncRoster(_rawEntries);
+    _bootRoute();
   });
-});
+}
+// 명단이 준비된 뒤의 공통 진입 라우팅(교사/학생 자동 로그인)
+function _bootRoute(){
+  // URL param ?stu=CODE 자동 로그인
+  const urlParams=new URLSearchParams(window.location.search);
+  const urlStu=urlParams.get('stu');
+  if(urlStu&&shopData&&shopData.stu){
+    const stu=shopData.stu.find(s=>String(s.cd).trim()===urlStu);
+    if(stu){me=stu;localStorage.setItem('sw_stuCode',urlStu);showStudentApp();return;}
+  }
+  const tc=localStorage.getItem('sw_teacher');
+  const sc=localStorage.getItem('sw_stuCode');
+  if(tc){isTeacher=true;showTeacherApp();}
+  else if(sc&&shopData&&shopData.stu){
+    const stu=shopData.stu.find(s=>String(s.cd).trim()===sc);
+    if(stu){me=stu;showStudentApp();}
+  }
+}
 </script>
 </body>
 </html>
