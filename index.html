@@ -68,6 +68,67 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 .gc6{border-color:#FCE4EC;}.gc6.selected{border-color:#F48FB1;}
 .gc7{border-color:#B2EBF2;}.gc7.selected{border-color:#4DD0E1;}
 
+/* 쿠키 선택 현황·목록 */
+.pick-status{font-size:20px;color:#888;margin-bottom:10px;}
+.pick-status.done{color:#2E7D32;font-weight:bold;}
+.pick-list{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.pick-item{display:flex;align-items:center;gap:10px;background:white;border:2.5px solid #FFD6E0;border-radius:14px;padding:10px 14px;cursor:pointer;transition:transform .12s,box-shadow .12s;}
+.pick-item:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.1);}
+.pick-item .pi-name{font-size:22px;color:#333;flex-shrink:0;}
+.pick-item .pi-stars{font-size:19px;color:#FFB300;letter-spacing:1px;flex-shrink:0;}
+.pick-item .pi-reason{font-size:17px;color:#999;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pick-item .pi-x{font-size:20px;color:#ccc;padding:0 4px;flex-shrink:0;}
+.pick-item .pi-x:hover{color:#FF5252;}
+.gem-chip.full{opacity:.35;}
+
+/* 쿠키 별점·이유 입력창 */
+.pick-modal{position:fixed;inset:0;background:rgba(60,35,15,.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;animation:popIn .15s ease;}
+.pick-box{background:linear-gradient(160deg,#FFF7EC,#FFEFD9);border:4px solid #E0A868;border-radius:28px;padding:26px 28px 20px;max-width:560px;width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 18px 50px rgba(90,50,15,.35);text-align:center;}
+.pick-cookie{font-size:46px;line-height:1;}
+.pick-title{font-size:32px;color:#8E4A1F;margin:4px 0 8px;}
+.pick-desc{font-size:17px;color:#A9784E;background:rgba(255,255,255,.65);border-radius:14px;padding:10px 14px;line-height:1.6;word-break:keep-all;margin-bottom:16px;}
+.pick-label{font-size:19px;color:#8E4A1F;margin-bottom:8px;}
+.pick-stars{display:flex;justify-content:center;gap:6px;margin-bottom:6px;}
+.pick-star{font-size:44px;line-height:1;cursor:pointer;color:#E3D3BE;transition:transform .12s;user-select:none;}
+.pick-star:hover{transform:scale(1.15);}
+.pick-star.on{color:#FFB300;text-shadow:0 2px 8px rgba(255,179,0,.45);}
+/* 앞으로 빛날 쿠키는 별 대신 불꽃 — 이모지는 CSS color가 안 먹으므로 흑백/투명도로 꺼진 상태를 표현 */
+/* 회의 결과 — 내용이 길어도 칸이 화면을 넘지 않게(예쁜 분홍 스크롤바) */
+.clsscroll{overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin;scrollbar-color:#FFB1CB #FFF3F7;}
+.clsscroll::-webkit-scrollbar{width:10px;}
+.clsscroll::-webkit-scrollbar-track{background:#FFF3F7;border-radius:8px;}
+.clsscroll::-webkit-scrollbar-thumb{background:#FFB1CB;border-radius:8px;border:2px solid #FFF3F7;}
+.clsscroll::-webkit-scrollbar-thumb:hover{background:#FF7BA9;}
+.clsmore{margin-top:6px;width:100%;border:2px dashed #FFD6E0;background:#FFF8FB;color:#FF5C8D;border-radius:12px;font-family:'Jua';font-size:17px;line-height:1;padding:7px 10px;cursor:pointer;}
+.clsmore:hover{background:#FFF0F5;}
+/* 전체화면(⛶) 버튼 */
+.clsfs{border:2px solid #FFD6E0;background:linear-gradient(135deg,#FFFFFF,#FFF0F5);color:#FF5C8D;border-radius:12px;font-size:15px;line-height:1;padding:6px 11px;cursor:pointer;box-shadow:0 2px 0 #FFD6E0;transition:.12s;}
+.clsfs:hover{background:linear-gradient(135deg,#FFF0F5,#FFE4EF);}
+.clsfs:active{transform:translateY(2px);box-shadow:0 0 0 #FFD6E0;}
+.pick-star.flame{filter:grayscale(1);opacity:.4;}
+.pick-star.flame.on{filter:none;opacity:1;text-shadow:0 2px 8px rgba(244,81,30,.45);}
+.pick-starword{font-size:17px;color:#B08A5E;margin-bottom:16px;min-height:22px;}
+.pick-textarea{width:100%;padding:14px 16px;border:2.5px solid #E9C79A;border-radius:16px;font-family:'Jua';font-size:22px;line-height:1.6;outline:none;resize:vertical;background:white;}
+.pick-textarea:focus{border-color:#D08A3C;}
+.pick-btns{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap;}
+.pick-btn{font-family:'Jua';font-size:20px;padding:11px 26px;border-radius:16px;border:none;cursor:pointer;}
+.pick-btn.ok{background:linear-gradient(135deg,#F0A44B,#D9822B);color:white;box-shadow:0 4px 14px rgba(200,120,40,.35);}
+.pick-btn.ghost{background:white;border:2.5px solid #E9C79A;color:#A9784E;}
+
+/* 좋·아·바 */
+.gab-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+@media(max-width:900px){.gab-grid{grid-template-columns:1fr;}}
+.gab-card{border-radius:18px;padding:16px;border:3px solid;}
+.gab-card.good{border-color:#A5D6A7;background:#F3FBF3;}
+.gab-card.bad{border-color:#FFCC80;background:#FFF9F0;}
+.gab-card.wish{border-color:#B3C7FF;background:#F4F7FF;}
+.gab-head{font-size:26px;margin-bottom:10px;display:flex;align-items:center;gap:10px;color:#555;}
+.gab-badge{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:50%;color:white;font-size:24px;flex-shrink:0;}
+.gab-card.good .gab-badge{background:#66BB6A;}
+.gab-card.bad .gab-badge{background:#FFA726;}
+.gab-card.wish .gab-badge{background:#5C7CFA;}
+.gab-card .form-textarea{font-size:24px;min-height:120px;}
+
 /* 능력 툴팁 */
 .gem-tooltip{position:fixed;background:#333;color:white;padding:8px 14px;border-radius:12px;font-size:13px;max-width:220px;line-height:1.5;pointer-events:none;z-index:9000;opacity:0;transition:opacity .15s;word-break:keep-all;}
 
@@ -270,16 +331,18 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 #submitErrorModal .err-ok{padding:12px 40px;border:none;border-radius:16px;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-family:'Jua';font-size:17px;cursor:pointer;box-shadow:0 4px 0 #D94F75;transition:.1s;}
 #submitErrorModal .err-ok:active{transform:translateY(2px);box-shadow:0 2px 0 #D94F75;}
 /* 반려 알림 모달 (학생) */
-#rejectionNoticeModal{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;}
-#rejectionNoticeModal .rn-box{background:white;border-radius:24px;max-width:400px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.25);overflow:hidden;animation:popIn .2s ease;}
-#rejectionNoticeModal .rn-head{background:linear-gradient(135deg,#FFA726,#E65100);padding:22px 24px;text-align:center;}
-#rejectionNoticeModal .rn-head .rn-icon{font-size:44px;display:block;margin-bottom:6px;}
-#rejectionNoticeModal .rn-head h3{color:white;font-size:18px;margin:0;}
-#rejectionNoticeModal .rn-body{padding:20px 24px;}
-#rejectionNoticeModal .rn-msg{background:#FFF8E1;border:2px solid #FFE082;border-radius:14px;padding:14px 16px;font-size:15px;line-height:1.7;color:#4E2800;white-space:pre-wrap;margin-bottom:6px;}
-#rejectionNoticeModal .rn-sub{font-size:12px;color:#aaa;text-align:center;margin-bottom:16px;}
-#rejectionNoticeModal .rn-ok{width:100%;padding:13px;border:none;border-radius:14px;background:linear-gradient(135deg,#FFA726,#E65100);color:white;font-family:'Jua';font-size:17px;cursor:pointer;box-shadow:0 4px 0 #BF360C;transition:.1s;}
-#rejectionNoticeModal .rn-ok:active{transform:translateY(2px);box-shadow:0 2px 0 #BF360C;}
+/* 반려 알림창 — 개인 생활기록부(#rejectionNoticeModal)와 학급회의(#clsRejectNoticeModal)가 함께 쓴다 */
+.rn-modal{position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;}
+.rn-modal.hidden{display:none;}
+.rn-modal .rn-box{background:white;border-radius:24px;max-width:400px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.25);overflow:hidden;animation:popIn .2s ease;}
+.rn-modal .rn-head{background:linear-gradient(135deg,#FFA726,#E65100);padding:22px 24px;text-align:center;}
+.rn-modal .rn-head .rn-icon{font-size:44px;display:block;margin-bottom:6px;}
+.rn-modal .rn-head h3{color:white;font-size:18px;margin:0;}
+.rn-modal .rn-body{padding:20px 24px;}
+.rn-modal .rn-msg{background:#FFF8E1;border:2px solid #FFE082;border-radius:14px;padding:14px 16px;font-size:15px;line-height:1.7;color:#4E2800;white-space:pre-wrap;margin-bottom:6px;}
+.rn-modal .rn-sub{font-size:12px;color:#aaa;text-align:center;margin-bottom:16px;}
+.rn-modal .rn-ok{width:100%;padding:13px;border:none;border-radius:14px;background:linear-gradient(135deg,#FFA726,#E65100);color:white;font-family:'Jua';font-size:17px;cursor:pointer;box-shadow:0 4px 0 #BF360C;transition:.1s;}
+.rn-modal .rn-ok:active{transform:translateY(2px);box-shadow:0 2px 0 #BF360C;}
 @keyframes popIn{from{transform:scale(.88);opacity:0;}to{transform:scale(1);opacity:1;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 /* 툴바(색상)와 굵기바를 각각 별도 행으로 분리 — 같은 행에 두면 transform:scale 확대 시 가로로 겹침 */
@@ -375,6 +438,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <h1 id="stuRecordTitle">✨ 생활기록부</h1>
     </div>
 
+    <div id="personalFormArea">
     <div id="readonlyBanner" class="hidden" style="background:#FFF3E0;color:#E65100;padding:12px;margin-bottom:12px;border-radius:10px;text-align:center;border:2px solid #FFCC80;">📖 읽기만 가능합니다</div>
     <div id="submittedBanner" class="submitted-banner hidden">✅ 제출 완료! 선생님이 확인하실 거예요 🌟</div>
     <div id="rejectedBanner" class="rejected-banner hidden">
@@ -510,6 +574,76 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <button class="btn-save" id="saveDraftBtn" onclick="saveRecord('draft')">💾 임시저장</button>
       <button class="btn-submit" id="submitBtn" onclick="submitRecord()">📮 제출하기</button>
     </div>
+    </div><!-- /personalFormArea -->
+
+    <!-- ═══ 우리 반 돌아보기 ═══ -->
+    <div id="classFormArea" class="hidden">
+      <div id="clsNoMeeting" class="hidden" style="background:#F5F5F5;color:#999;padding:22px;margin-bottom:12px;border-radius:12px;text-align:center;font-size:20px;">아직 열린 학급회의가 없어요</div>
+      <!-- 배너 없음: 제출·승인·반려·마감은 모두 예쁜 알림창(#clsNoticeModal / #clsRejectNoticeModal)으로 알린다 -->
+
+      <div class="ability-grid">
+        <div class="ability-section full">
+          <div class="section-title"><span>🍪</span><span>가장 <span style="color:#4FC3F7">빛났던</span> 쿠키</span></div>
+          <div class="section-sub">이번 달 우리 반을 돌아봤을 때 가장 빛난 쿠키는?</div>
+          <div class="gem-grid" id="brightCookies"></div>
+          <div class="pick-status" id="brightStatus">0 / 3 선택</div>
+          <div class="pick-list" id="brightPicks"></div>
+        </div>
+        <div class="ability-section lack">
+          <div class="section-title"><span>🍪</span><span>앞으로 <span style="color:#FF7BA9">빛날</span> 쿠키</span></div>
+          <div class="section-sub">이번 달 우리 반을 돌아봤을 때 가장 개선되어야 할 쿠키는?</div>
+          <div class="gem-grid" id="improveCookies"></div>
+          <div class="pick-status" id="improveStatus">0 / 3 선택</div>
+          <div class="pick-list" id="improvePicks"></div>
+        </div>
+      </div>
+
+      <div class="teacher-section">
+        <h3>📝 좋아해</h3>
+        <div class="gab-grid">
+          <div class="gab-card good">
+            <div class="gab-head"><span class="gab-badge">좋</span> 좋았던 점 / 감사 나누기</div>
+            <textarea class="form-textarea" id="clsGood" placeholder="이번 달 우리 반에서 좋았던 점, 고마웠던 일은?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
+            <div class="char-counter" id="cc_clsGood">0자</div>
+          </div>
+          <div class="gab-card bad">
+            <div class="gab-head"><span class="gab-badge">아</span> 아쉬웠던 점</div>
+            <textarea class="form-textarea" id="clsBad" placeholder="이번 달 우리 반에서 아쉬웠던 점은?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
+            <div class="char-counter" id="cc_clsBad">0자</div>
+          </div>
+          <div class="gab-card wish">
+            <div class="gab-head"><span class="gab-badge">해</span> 해결방안</div>
+            <textarea class="form-textarea" id="clsWish" placeholder="아쉬웠던 점을 어떻게 해결하면 좋을까요?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
+            <div class="char-counter" id="cc_clsWish">0자</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="submit-area">
+        <button class="btn-save" id="clsSaveBtn" onclick="clsSaveRecord('draft')">💾 임시저장</button>
+        <button class="btn-submit" id="clsSubmitBtn" onclick="clsSubmitRecord()">📮 제출하기</button>
+      </div>
+    </div>
+
+    <!-- 쿠키 별점·이유 입력창 -->
+    <div id="pickModal" class="pick-modal hidden" onclick="if(event.target===this)closePickModal()">
+      <div class="pick-box">
+        <div class="pick-cookie">🍪</div>
+        <div class="pick-title" id="pickTitle"></div>
+        <div class="pick-desc" id="pickDesc"></div>
+        <div class="pick-label" id="pickStarLabel">우리 반은 이 쿠키를 얼마나 잘 하고 있나요?</div>
+        <div class="pick-stars" id="pickStars"></div>
+        <div class="pick-starword" id="pickStarWord">별을 눌러 주세요</div>
+        <div class="pick-label">왜 그렇게 생각했나요?</div>
+        <textarea id="pickReason" class="pick-textarea" rows="4" placeholder="이유를 써 주세요" oninput="_pickCount()"></textarea>
+        <div class="char-counter" id="cc_pickReason" style="text-align:right;">0자</div>
+        <div class="pick-btns">
+          <button class="pick-btn ghost" id="pickRemoveBtn" onclick="removePickFromModal()">🗑 선택 취소</button>
+          <button class="pick-btn ghost" onclick="closePickModal()">닫기</button>
+          <button class="pick-btn ok" onclick="savePickFromModal()">확인</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -532,8 +666,9 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
     </div>
   </div>
   <div class="teacher-tabs">
-    <button class="t-tab active" onclick="teacherTab('overview',this)">📋 제출 현황</button>
+    <button class="t-tab active" onclick="teacherTab('overview',this)">📖 생활기록부</button>
     <button class="t-tab" onclick="teacherTab('ranking',this)">🏆 랭킹</button>
+    <button class="t-tab" onclick="teacherTab('classrec',this)">🏛️ 학급회의</button>
     <button class="t-tab" onclick="teacherTab('buzzer',this)">🔔 부저</button>
     <button class="t-tab" onclick="teacherTab('settings',this)">⚙️ 설정</button>
   </div>
@@ -555,6 +690,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <select id="tMonthSel" onchange="detachOverviewListener();loadOverview();renderMonthManageList()" style="padding:7px 12px;border:2px solid #FFD6E0;border-radius:10px;font-family:'Jua';font-size:15px;background:white;outline:none;"></select>
         <h4 id="overviewTitle" style="margin:0;">학생별 제출 현황</h4>
         <button class="pink-btn" onclick="loadOverview(true)" title="새로고침" style="margin-left:auto;">새로고침</button>
+        <button class="pink-btn" onclick="exportRecordsPdf()">⬇️ 다운로드</button>
       </div>
       <div id="overviewTable">로딩 중...</div>
     </div>
@@ -568,6 +704,29 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <button class="pink-btn" onclick="openTeacherMsgModal()" style="margin-left:auto;">✉️ 선생님께 한마디</button>
     </div>
     <div id="rankingWrap">로딩 중...</div>
+  </div>
+
+  <!-- 탭: 학급회의 -->
+  <div id="tab-classrec" class="t-content hidden">
+    <div class="t-card" style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+        <h4 style="margin:0;">🏛️ 회의 관리</h4>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;">
+          <input id="addCmInput" type="text" placeholder="예: 9월 학급회의, 2학기 첫 회의" maxlength="20" style="width:230px;padding:6px 10px;border:2px solid #FFD6E0;border-radius:10px;font-family:'Jua';font-size:14px;outline:none;" onkeyup="if(event.key==='Enter')addClassMeeting()">
+          <button class="pink-btn" onclick="addClassMeeting()">추가</button>
+        </div>
+      </div>
+      <div id="cmManageList" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;padding-right:6px;"></div>
+    </div>
+    <div class="t-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <select id="tCmSel" onchange="loadClassOverview(true)" style="padding:7px 12px;border:2px solid #FFD6E0;border-radius:10px;font-family:'Jua';font-size:15px;background:white;outline:none;"></select>
+        <h4 style="margin:0;">학생별 제출 현황</h4>
+        <button class="pink-btn" onclick="loadClassOverview(true)" style="margin-left:auto;">새로고침</button>
+        <button class="pink-btn" onclick="exportClassPdf()">⬇️ 다운로드</button>
+      </div>
+      <div id="classOverviewWrap">로딩 중...</div>
+    </div>
   </div>
 
   <!-- 탭: 부저 -->
@@ -632,7 +791,19 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <div class="limit-row"><span class="limit-label">방어자 이유</span><input class="limit-input" id="lim_defenderReason" type="number" min="0" max="500" value="10"></div>
       <div class="limit-row"><span class="limit-label">유망주 이유</span><input class="limit-input" id="lim_promisingReason" type="number" min="0" max="500" value="10"></div>
       <div class="limit-row"><span class="limit-label">달고나 메시지</span><input class="limit-input" id="lim_dalgonaMsg" type="number" min="0" max="500" value="10"></div>
+      <div class="limit-row"><span class="limit-label">[우리 반] 쿠키 선택 이유</span><input class="limit-input" id="lim_brightReason" type="number" min="0" max="500" value="10"><input class="limit-input" id="lim_improveReason" type="number" min="0" max="500" value="10" style="display:none"></div>
+      <div class="limit-row"><span class="limit-label">[우리 반] 좋아해 각 칸</span><input class="limit-input" id="lim_clsGood" type="number" min="0" max="500" value="10"></div>
       <button class="add-stu-btn" onclick="saveLimits()" style="margin-top:8px;">💾 저장</button>
+    </div>
+    <!-- 4. 우리 반 쿠키 목록 -->
+    <div class="setting-section">
+      <h4>🍪 우리 반 쿠키 목록 <span style="font-size:12px;color:#bbb;font-weight:normal;">(한 줄에 하나씩 · <b>이름 | 설명</b> 형식 — 설명을 쓰면 학생이 쿠키를 누를 때 말풍선으로 떠요)</span></h4>
+      <textarea id="cookieListInput" rows="12" style="width:100%;padding:12px;border:2px solid #FFD6E0;border-radius:12px;font-family:'Jua';font-size:15px;outline:none;line-height:1.7;" placeholder="시간 약속 | 쿠키를 만들기로 한 시간에 딱 맞춰서 모두 모여 준비하고 있는 거야.&#10;정리 정돈 | ...&#10;준비성"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+        <button class="add-stu-btn" onclick="saveCookieList()">💾 저장</button>
+        <button class="pink-btn" onclick="resetCookieList()">기본 목록으로</button>
+        <span id="cookieCountLabel" style="font-size:13px;color:#888;"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -698,7 +869,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 </div>
 
 <!-- 반려 알림 모달 (학생) -->
-<div id="rejectionNoticeModal" class="hidden">
+<div id="rejectionNoticeModal" class="rn-modal hidden">
   <div class="rn-box">
     <div class="rn-head">
       <span class="rn-icon">💬</span>
@@ -708,6 +879,35 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       <div class="rn-msg" id="rejectionNoticeMsg"></div>
       <div class="rn-sub">확인 후 내용을 수정하고 다시 제출해주세요</div>
       <button class="rn-ok" onclick="confirmRejectionNotice()">확인하고 수정하기 ✏️</button>
+    </div>
+  </div>
+</div>
+
+<!-- 학급회의 상태 알림 (제출·승인·마감) — 배너 대신 쓰는 공용 알림창 -->
+<div id="clsNoticeModal" class="rn-modal hidden">
+  <div class="rn-box">
+    <div class="rn-head" id="clsNoticeHead">
+      <span class="rn-icon" id="clsNoticeIcon">✅</span>
+      <h3 id="clsNoticeTitle"></h3>
+    </div>
+    <div class="rn-body">
+      <div class="rn-msg" id="clsNoticeMsg" style="text-align:center;"></div>
+      <button class="rn-ok" id="clsNoticeOk" onclick="closeClsNotice()">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 학급회의 반려 알림 (같은 rn-* 스타일) -->
+<div id="clsRejectNoticeModal" class="rn-modal hidden">
+  <div class="rn-box">
+    <div class="rn-head" style="background:linear-gradient(135deg,#FF8A80,#C62828);">
+      <span class="rn-icon">💬</span>
+      <h3>선생님의 반려 메시지</h3>
+    </div>
+    <div class="rn-body">
+      <div class="rn-msg" id="clsRejectNoticeMsg"></div>
+      <div class="rn-sub">확인 후 내용을 고쳐서 다시 제출해주세요</div>
+      <button class="rn-ok" style="background:linear-gradient(135deg,#FF8A80,#C62828);box-shadow:0 4px 0 #8E0000;" onclick="closeClsRejectNotice()">확인하고 수정하기 ✏️</button>
     </div>
   </div>
 </div>
@@ -725,7 +925,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
     </div>
     <div class="sc-foot">
       <button class="sc-cancel" onclick="closeSubmitConfirmModal()">다시 볼게요</button>
-      <button class="sc-ok" onclick="doFinalSubmit()">제출하기! 🚀</button>
+      <button class="sc-ok" onclick="submitConfirmOk()">제출하기! 🚀</button>
     </div>
   </div>
 </div>
@@ -990,10 +1190,11 @@ async function refreshHideBtn(){
   const btn=document.getElementById('hideMonthBtn');
   if(!btn) return;
   const month=document.getElementById('tMonthSel')?.value;
-  if(!month){btn.textContent='🙈 숨기기';return;}
+  if(!month){btn.textContent='👁️ 보이기 중';return;}
   const hidden=!!_hiddenCache[month];
-  btn.textContent=hidden?'👁️ 보이기':'🙈 숨기기';
-  btn.style.background=hidden?'#66BB6A':'#FFA726';
+  // 라벨은 "지금 상태" (누르면 반대로 바뀐다)
+  btn.textContent=hidden?'🙈 숨기기 중':'👁️ 보이기 중';
+  btn.style.background=hidden?'#9E9E9E':'#66BB6A';
 }
 async function clickHideMonth(){
   const month=document.getElementById('tMonthSel')?.value;
@@ -1003,22 +1204,93 @@ async function clickHideMonth(){
 }
 // ── 학생 월 탭 ──
 let _readonlyMode=false;
+// 상단 탭 하나로 생활기록부(월)와 학급회의(회차)를 함께 보여준다.
+//   별도의 모드 전환 버튼 없이, 어떤 탭을 누르느냐가 곧 화면 전환이다.
 function buildStudentMonthTabs(){
   const wrap=document.getElementById('studentMonthTabs');
   if(!wrap) return;
-  const entries=sortedMonthEntries().filter(([v])=>!_hiddenCache[v]);
-  if(!entries.length){wrap.innerHTML='';return;}
-  wrap.innerHTML=entries.map(([val,label])=>{
-    const active=val===currentMonth;
-    const bg=active?'white':'rgba(255,255,255,.35)';
-    const color=active?'#E91E63':'white';
-    const border=active?'white':'rgba(255,255,255,.6)';
-    const shadow=active?'box-shadow:0 3px 10px rgba(0,0,0,.15);':'';
-    return `<button onclick="switchStudentMonth('${val.replace(/'/g,"\\'")}')" style="background:${bg};color:${color};border:2px solid ${border};border-radius:14px;padding:6px 14px;font-family:'Jua';font-size:15px;font-weight:bold;cursor:pointer;${shadow}">${label}</button>`;
-  }).join('');
+  const months=sortedMonthEntries().filter(([v])=>!_hiddenCache[v]);
+  const meets=(typeof sortedMeetings==='function'?sortedMeetings():[]).filter(([id])=>!_cmHidden[id]);
+  const btn=(on,label,onclick)=>{
+    const bg=on?'white':'rgba(255,255,255,.35)';
+    const color=on?'#E91E63':'white';
+    const border=on?'white':'rgba(255,255,255,.6)';
+    const shadow=on?'box-shadow:0 3px 10px rgba(0,0,0,.15);':'';
+    return `<button onclick="${onclick}" style="background:${bg};color:${color};border:2px solid ${border};border-radius:14px;padding:6px 14px;font-family:'Jua';font-size:15px;font-weight:bold;cursor:pointer;${shadow}">${label}</button>`;
+  };
+  const html=[];
+  months.forEach(([val,label])=>{
+    html.push(btn(recordMode==='personal'&&val===currentMonth,'📖 '+_clsEsc(label),
+      `switchStudentMonth('${val.replace(/'/g,"\\'")}')`));
+  });
+  if(months.length&&meets.length) html.push('<span style="color:rgba(255,255,255,.55);font-size:18px;align-self:center;">|</span>');
+  meets.forEach(([id,label])=>{
+    html.push(btn(recordMode==='class'&&id===cmCurrent,'🏛️ '+_clsEsc(label)+(_cmIsActive(id)?'':' 🔒'),
+      `switchMeeting('${id.replace(/'/g,"\\'")}')`));
+  });
+  wrap.innerHTML=html.join('');
+}
+/* ── 학생: 숨기기/보이기·마감 실시간 반영 ──
+   예전엔 로그인 때 목록을 한 번만 읽어서, 선생님이 월/회의를 숨기거나 열어도
+   학생이 새로고침해야 보였다. 폴링 대신 작은 노드 몇 개에 리스너를 건다(트래픽 거의 0). */
+let _visRefs=[];
+function listenVisibility(){
+  detachVisibilityListeners();
+  const bind=(path,apply)=>{
+    const ref=saengRef.child(path);
+    const cb=ref.on('value',s=>{ apply(s.val()||{}); _onVisibilityChanged(); });
+    _visRefs.push([ref,cb]);
+  };
+  bind('months',      v=>{_monthsCache=v;});
+  bind('months_hidden',v=>{_hiddenCache=v;});
+  bind('months_order',v=>{_monthsOrder=v;});
+  bind('cm_list',     v=>{_cmList=v;});
+  bind('cm_hidden',   v=>{_cmHidden=v;});
+  bind('cm_order',    v=>{_cmOrder=v;});
+  bind('cm_status',   v=>{_cmStatus=v;});
+}
+function detachVisibilityListeners(){
+  _visRefs.forEach(([r,c])=>{try{r.off('value',c);}catch(e){}});
+  _visRefs=[];
+}
+function _onVisibilityChanged(){
+  if(!me||isTeacher) return;
+  const visM=sortedMonthEntries().filter(([v])=>!_hiddenCache[v]).map(x=>x[0]);
+  const visC=sortedMeetings().filter(([id])=>!_cmHidden[id]).map(x=>x[0]);
+  // 보고 있던 탭이 숨겨졌으면 다른 탭으로 옮긴다(작성 중 내용은 각 switch가 flush한다)
+  if(recordMode==='personal'&&!visM.includes(currentMonth)){
+    if(visM.length){ switchStudentMonth(visM[0]); return; }
+    if(visC.length){ switchMeeting(_cmDefaultPick()); return; }   // 월이 전부 숨겨졌으면 회의로
+  }
+  if(recordMode==='class'&&cmCurrent&&!visC.includes(cmCurrent)){
+    if(visC.length){ switchMeeting(_cmDefaultPick()); return; }
+    _clsFlush();
+    if(visM.length){ switchStudentMonth(visM[0]); return; }
+  }
+  // 아직 아무 회의도 안 고른 상태면 기본 선택 규칙을 따른다(부팅 순서에 따라 옛 회의가 잡히지 않도록)
+  if(!cmCurrent&&visC.length) cmCurrent=_cmDefaultPick();
+  buildCmTabs();               // 탭 줄 + 회의 폼 표시까지 함께 갱신
+  setRecordMode(recordMode);   // 회의 제목이 바뀌면 화면 제목도 따라가게(표시만 갱신)
+  _clsSyncLock();
+}
+// 마감/재개는 폼을 다시 채우지 않고 잠금만 바꾼다(작성 중 글을 서버 값으로 덮지 않도록)
+function _clsSyncLock(){
+  if(recordMode!=='class'||!cmCurrent) return;
+  const closed=!_cmIsActive(cmCurrent);
+  if(closed) _clsFlush();
+  clsSetLocked(closed||_clsMyApproved);
+  // 보고 있는 도중 선생님이 마감하면 예쁜 창으로 알린다(회의당 한 번)
+  if(closed&&!_clsClosedSeen.has(cmCurrent)){
+    _clsClosedSeen.add(cmCurrent);
+    showClsNotice('📖','회의가 마감됐어요','지금부터는 읽기만 할 수 있어요.',
+      'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
+  }
+  if(!closed) _clsClosedSeen.delete(cmCurrent);   // 다시 열리면 다음 마감 때 또 알린다
 }
 async function switchStudentMonth(val){
-  if(val===currentMonth) return;
+  if(val===currentMonth&&recordMode==='personal') return;
+  if(recordMode!=='personal'){ _clsFlush(); recordMode='personal'; }
+  if(val===currentMonth){ setRecordMode('personal'); buildStudentMonthTabs(); return; }
   // 캔버스 백업을 "이전 월 키로" 확정 저장한 뒤 월을 바꾼다.
   //   _writeCanvasDraft는 발화 시점의 currentMonth를 읽으므로, 700ms 디바운스 안에 월을 바꾸면
   //   resetForm으로 비워진 캔버스가 "새 월 키"로 저장돼(=빈 그림 판정) 새 월의 백업까지 지워졌다.
@@ -1027,8 +1299,8 @@ async function switchStudentMonth(val){
   detachMyRecordListener();
   currentMonth=val;
   _rejectionConfirmed=false;
+  setRecordMode('personal');
   buildStudentMonthTabs();
-  document.getElementById('stuRecordTitle').textContent=`📖 ${_monthsCache[currentMonth]||currentMonth} 생활기록부`;
   loadMyRecord();
 }
 async function getLatestActiveMonth(fallback){
@@ -1130,7 +1402,7 @@ async function renderMonthManageList(){
     const hidden=!!_hiddenCache[val];
     const esc=val.replace(/'/g,"\\'");
     const active=statusMap[val]?.status==='active';
-    const hideLabel=hidden?'숨기기':'보이기';
+    const hideLabel=hidden?'🙈 숨기기 중':'👁️ 보이기 중';   // 누를 동작이 아니라 지금 상태를 보여준다
     const statusLabel=active?'진행':'마감';
     return `<div class="month-row" draggable="true" data-val="${val}" ondragstart="onMonthDragStart(event,'${esc}')" ondragover="onMonthDragOver(event)" ondragleave="onMonthDragLeave(event)" ondrop="onMonthDrop(event,'${esc}')" ondragend="onMonthDragEnd(event)" style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#FFF0F5;border:2px solid #FFD6E0;border-radius:10px;flex-wrap:wrap;cursor:grab;">
       <span style="flex:1;min-width:80px;font-size:15px;color:${hidden?'#aaa':'#333'};${hidden?'text-decoration:line-through;':''}">${label}</span>
@@ -1310,6 +1582,7 @@ function populateMonthSelectors(months,selectors){
 }
 async function saveMonthToFirebase(val,label){
   await saengRef.child('months/'+val).set(label);
+  saengRef.child('settings/monthsInit').set(true).catch(()=>{});   // 자동 생성은 최초 1회뿐
   _monthsCache[val]=label;
   if(!_monthsOrder[val]){
     const now=Date.now();
@@ -1454,13 +1727,17 @@ function loginTeacher(){
   else alert('비밀번호 오류');
 }
 function logout(){
-  _flushCanvasSave(); // 대기 중 캔버스 백업을 me가 살아있을 때 확정(_writeCanvasDraft는 me 없으면 early-return)
+  _clsFlush(); // 우리 반 대기 저장 확정 (me가 살아있을 때)
+  _flushCanvasSave();// 대기 중 캔버스 백업을 me가 살아있을 때 확정(_writeCanvasDraft는 me 없으면 early-return)
   detachMyRecordListener();
   detachOverviewListener();
   // 부저/타이머 리스너도 해제. 남겨두면 로그아웃 후에도 콜백이 돌며 me.cd를 참조해 TypeError.
   saengRef.child('buzzer').off('value');
   saengRef.child('timer').off('value');
   saengRef.child('force_reload').off('value'); // 무해하지만 재로그인 전까지 남는 구독 정리(재부착은 listenForceReload에서 off→on)
+  detachVisibilityListeners();
+  _detachMyClsRecord();
+  _detachClsOverview();
   me=null;isTeacher=false;
   lackSelected=new Set();fullSelected=new Set();
   currentGift='마음';formLocked=false;_rejectionConfirmed=false;
@@ -1472,6 +1749,13 @@ function logout(){
   document.getElementById('giftHeartText').value='';
   document.querySelectorAll('.gift-option').forEach(o=>{o.classList.toggle('selected',o.dataset.gift==='마음');});
   document.querySelectorAll('.gem-chip').forEach(el=>el.classList.remove('selected'));
+  // 학급회의 폼 초기화 (다음 학생에게 이전 학생 글이 남지 않도록)
+  clsBright=[];clsImprove=[];_clsCtx='';cmCurrent='';
+  _clsRejReason='';_clsMyApproved=false;_clsClosedSeen.clear();
+  ['clsGood','clsBad','clsWish'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('pickModal')?.classList.add('hidden');
+  document.getElementById('clsNoticeModal')?.classList.add('hidden');
+  document.getElementById('clsRejectNoticeModal')?.classList.add('hidden');
   // 캔버스 초기화
   if(canvas&&ctx){ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);}
   // 배너 숨김
@@ -1499,6 +1783,10 @@ async function showStudentApp(){
   document.getElementById('stuRecordTitle').textContent=`📖 ${_monthsCache[currentMonth]||currentMonth} 생활기록부`;
   buildGemGrids();
   buildStudentSelects();
+  // 학급회의: 쿠키 그리드 + 회의 탭 (실패해도 기본 목록으로 뜬다)
+  loadCookieList().then(buildCookieGrids).catch(()=>buildCookieGrids());
+  initStudentMeetings().catch(()=>{});
+  setRecordMode('personal');
   // 글자 수 제한 로드 후 기록 로드
   saengRef.child('settings/limits').once('value',snap=>{
     const d=snap.val();if(d) Object.assign(charLimits,d);
@@ -1507,16 +1795,26 @@ async function showStudentApp(){
   listenBuzzer();
   listenTimerStudent();
   listenForceReload();
+  listenVisibility();   // 월/회의 숨기기·보이기·마감을 새로고침 없이 반영
 }
 async function showTeacherApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('teacherApp').classList.remove('hidden');
   initMonthSelectors();
   await loadMonthsFromFirebase();
-  // 영속 목록이 비어 있으면 시스템 현재 월을 자동 추가
+  // 처음 쓰는 반에만 현재 월을 자동으로 하나 만들어 준다.
+  //   ⚠️ 예전엔 "목록이 비었으면 추가"였다 — 그래서 마지막 하나를 지우고 새로고침하면
+  //      지운 월이 되살아났다(지워도 계속 다시 뜨는 버그). 최초 1회 표식으로 막는다.
   if(!Object.keys(_monthsCache).length){
-    const [,m]=currentMonth.split('-');
-    await saveMonthToFirebase(currentMonth,`${parseInt(m)}월`);
+    let inited=false;
+    try{ inited=!!(await saengRef.child('settings/monthsInit').once('value')).val(); }catch(e){}
+    if(!inited){
+      const [,m]=currentMonth.split('-');
+      await saveMonthToFirebase(currentMonth,`${parseInt(m)}월`);
+    }
+  }else{
+    // 이미 쓰던 반이면 표식만 남긴다(다음에 전부 지워도 되살아나지 않도록)
+    saengRef.child('settings/monthsInit').set(true).catch(()=>{});
   }
   populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
   loadOverview();
@@ -1597,7 +1895,7 @@ function setGemsFromData(type,names){
 }
 
 // ═══ 글자 수 (최소 글자 수 기준) ═══
-let charLimits={lackReason:20,fullReason:20,growthPlan:20,mySecret:20,teacherMsg:30,defenderReason:10,promisingReason:10,dalgonaMsg:10};
+let charLimits={lackReason:20,fullReason:20,growthPlan:20,mySecret:20,teacherMsg:30,defenderReason:10,promisingReason:10,dalgonaMsg:10,brightReason:10,improveReason:10,clsGood:10,clsBad:10,clsWish:10};
 function countChars(ta){
   const min=charLimits[ta.id]||0;
   const len=ta.value.length;
@@ -1617,10 +1915,14 @@ function loadLimits(){
     // lim_lackReason also covers fullReason (same display row)
     const lr=document.getElementById('lim_lackReason');
     if(lr)lr.value=charLimits.lackReason;
+    const br=document.getElementById('lim_brightReason');
+    if(br)br.value=charLimits.brightReason;
+    const cg=document.getElementById('lim_clsGood');
+    if(cg)cg.value=charLimits.clsGood;
   });
 }
 async function saveLimits(){
-  const keys=['lackReason','fullReason','growthPlan','mySecret','teacherMsg','defenderReason','promisingReason','dalgonaMsg'];
+  const keys=['lackReason','fullReason','growthPlan','mySecret','teacherMsg','defenderReason','promisingReason','dalgonaMsg','brightReason'];
   keys.forEach(k=>{
     const inp=document.getElementById('lim_'+k)||document.getElementById('lim_lackReason');
     if(k==='fullReason'){charLimits[k]=charLimits.lackReason;}
@@ -1628,6 +1930,10 @@ async function saveLimits(){
   });
   // sync fullReason = lackReason
   charLimits.fullReason=charLimits.lackReason;
+  // 우리 반: 이유 두 칸 동일, 좋·아·바 세 칸 동일
+  charLimits.improveReason=charLimits.brightReason;
+  charLimits.clsGood=parseInt(document.getElementById('lim_clsGood')?.value)||charLimits.clsGood;
+  charLimits.clsBad=charLimits.clsWish=charLimits.clsGood;
   await saengRef.child('settings/limits').set(charLimits);
   toast('✅ 글자 수 제한 저장 완료!');
 }
@@ -2416,11 +2722,20 @@ async function submitRecord(){
 
   showSubmitConfirmModal();
 }
-function showSubmitConfirmModal(){
+// 제출 확인창은 개인 기록·학급회의가 함께 쓴다. fn을 주면 그 함수가 '제출하기'를 맡는다.
+let _scOnOk=null;
+function showSubmitConfirmModal(fn){
+  _scOnOk=(typeof fn==='function')?fn:null;
   document.getElementById('submitConfirmModal').classList.remove('hidden');
 }
 function closeSubmitConfirmModal(){
   document.getElementById('submitConfirmModal').classList.add('hidden');
+  _scOnOk=null;
+}
+function submitConfirmOk(){
+  const fn=_scOnOk;
+  if(fn){ closeSubmitConfirmModal(); fn(); return; }
+  doFinalSubmit();
 }
 let _submitting=false;
 async function doFinalSubmit(){
@@ -2535,6 +2850,10 @@ function _writeCanvasDraft(){
 window.addEventListener('pagehide', _flushCanvasSave);
 window.addEventListener('beforeunload', _flushCanvasSave);
 document.addEventListener('visibilitychange', function(){ if(document.hidden) _flushCanvasSave(); });
+// 우리 반 대기 저장도 같은 시점에 확정 (탭 닫기·백그라운드 전환)
+window.addEventListener('pagehide', ()=>_clsFlush());
+window.addEventListener('beforeunload', ()=>_clsFlush());
+document.addEventListener('visibilitychange', function(){ if(document.hidden) _clsFlush(); });
 // 한 획을 오래 긋는 도중 튕기면 그 획이 유실됨(백업은 획 끝에만 예약). 획은 캔버스에 실시간 반영되므로
 //   그리는 중에는 주기적으로 로컬 백업해 mid-stroke 크래시에 대비.
 setInterval(function(){ if(drawing && me && canvas) _writeCanvasDraft(); }, 4000);
@@ -3254,9 +3573,11 @@ function teacherTab(name,el){
   document.querySelectorAll('.t-content').forEach(c=>c.classList.add('hidden'));
   document.getElementById('tab-'+name).classList.remove('hidden');
   if(name!=='overview') detachOverviewListener();
+  if(name!=='classrec') _detachClsOverview();
   if(name==='overview'){loadOverview();renderMonthManageList();}
   if(name==='ranking') loadRanking();
-  if(name==='settings'){loadLimits();loadStuManage();}
+  if(name==='settings'){loadLimits();loadStuManage();loadCookieListToSettings();}
+  if(name==='classrec') loadClassOverview();
 }
 
 function initMonthSelectors(){
@@ -3718,19 +4039,30 @@ async function updateDalgona(key,status,panelId){
   const {cd,month}=_parseNomKey(key);
   await loadDetailPanel(cd,month);
 }
-let _rejectTarget={cd:null,month:null};
-function openRejectModal(cd,month,currentReason=''){
-  _rejectTarget={cd,month};
+// kind: 'record'(개인 생활기록부) | 'class'(학급회의). class일 때 month 자리에는 회의 id가 온다.
+let _rejectTarget={cd:null,month:null,kind:'record',fromMini:0};
+function openRejectModal(cd,month,currentReason='',kind='record',fromMini=0){
+  _rejectTarget={cd,month,kind,fromMini};
   document.getElementById('rejectMsgInput').value=currentReason;
   const info=document.getElementById('rejectTargetInfo');
-  if(info) info.textContent=getStudentName(cd)+' 학생 · '+month;
+  if(info) info.textContent=getStudentName(cd)+' 학생 · '+(kind==='class'?(_cmLabel(month)||'학급회의'):month);
   document.getElementById('rejectModal').classList.remove('hidden');
   setTimeout(()=>document.getElementById('rejectMsgInput').focus(),100);
 }
 function closeRejectModal(){document.getElementById('rejectModal').classList.add('hidden');}
 async function confirmReject(){
   const reason=document.getElementById('rejectMsgInput').value.trim();
-  const{cd,month}=_rejectTarget;
+  const{cd,month,kind,fromMini}=_rejectTarget;
+  if(kind==='class'){
+    // rejected_at: 같은 사유로 다시 반려해도 학생에게 알림창이 뜨도록 하는 표식
+    await saengRef.child('classRecords/'+month+'/'+cd).update({status:'rejected',rejected_reason:reason,rejected_at:Date.now()});
+    toast('🔙 반려 처리 완료');
+    closeRejectModal();
+    if(month===_clsViewMid) _clsPatchLocal(cd,{status:'rejected',rejected_reason:reason});
+    loadClassOverview(false,1);
+    if(fromMini) showClsStatusMini(cd);
+    return;
+  }
   await saengRef.child('records/'+month+'/'+cd).update({status:'rejected',rejected_reason:reason});
   toast('🔙 반려 처리 완료');
   closeRejectModal();
@@ -3961,6 +4293,11 @@ async function clearAllData(){
     _drSnap.forEach(c=>{ if(c.key.indexOf('student_')===0||_refs.has(c.key)) _drDels.push(_drRoot.child(c.key).remove()); });
     await Promise.all([
       saengRef.child('records').remove(),
+      saengRef.child('classRecords').remove(),
+      saengRef.child('cm_list').remove(),
+      saengRef.child('cm_order').remove(),
+      saengRef.child('cm_hidden').remove(),
+      saengRef.child('cm_status').remove(),
       saengRef.child('nominations').remove(),
       saengRef.child('dalgona').remove(),
       saengRef.child('months').remove(),
@@ -3968,6 +4305,9 @@ async function clearAllData(){
       saengRef.child('months_order').remove(),
       saengRef.child('months_hidden').remove(),
       saengRef.child('notifications').remove(),
+      // 월 자동생성 표식도 함께 지운다 — 전체 초기화는 '처음 쓰는 반' 상태로 돌아가는 것이므로
+      //   다음 접속에서 현재 월이 자동으로 하나 생겨야 한다(안 지우면 빈 목록으로 남는다).
+      saengRef.child('settings/monthsInit').remove(),
       ..._drDels,
     ]);
     _monthsCache={};_monthsOrder={};_hiddenCache={};
@@ -4750,6 +5090,1314 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
 
 // ═══ 토스트 ═══
 let toastTimer;
+/* ═══════════════════════════════════════════════════════════
+   🏛️ 학급회의 (우리 반 돌아보기)
+   - 생활기록부와 완전히 독립된 회차 목록: cm_list / cm_order / cm_hidden / cm_status
+   - 회의 id는 라벨이 아니라 발급 id('c'+base36 시각)다. 월(月) 키와 절대 겹치지 않게 해서
+     "9월"이라는 이름의 월을 지웠을 때 같은 이름의 회의 기록까지 지워지는 사고를 원천 차단한다.
+   - 학생 응답: Saengwal/classRecords/{회의id}/{학생코드}
+   - 개인 기록 파이프라인(추천·달고나·발송·승인·drawings)은 일절 건드리지 않는다.
+   ═══════════════════════════════════════════════════════════ */
+// 쿠키 = {n:이름, d:설명}. 설명은 클릭하면 뜨는 말풍선에 쓰인다(보석 능력의 ABILITY_DEFS와 같은 역할).
+//   설명은 교사 설정 탭에서 "이름 | 설명" 형식으로 편집한다.
+const DEFAULT_COOKIES=[
+  {n:'시간 약속',d:'쿠키를 만들기로 한 시간에 딱 맞춰서 모두 모여 준비하고 있는 거야.'},
+  {n:'정리 정돈',d:'모든걸 제자리에 두면 쿠키 만들기가 훨씬 수월하지. 지난 번 쿠키를 만들고 아무렇게나 후다닥 치웠더니 찾기 힘들어.'},
+  {n:'준비성',d:'쿠키 만들기 전에 조리법 읽어보고 필요한 재료가 다 있는지 확인하는 거야.'},
+  {n:'타협',d:'누구는 커다란 쿠키, 누구는 아주 조그만 쿠키를 만들고 싶은 생각이 다를 때 머리를 맞대고 중간 크기 쿠키를 만드는 거야.'},
+  {n:'공감',d:'너의 기분이 어떤지 알것같아. 쿠키 한입을 건네며 서로의 마음으로 물들이고 스며드는 거야.'},
+  {n:'마음 나눔',d:'내가 가지고 있는 달콤하고 맛있는 쿠키를 너도 한번 먹어봐! 함께 나누는 거야. 나눠 먹으면 두배로 달콤하거든.'},
+  {n:'귀 담아',d:'친구가 쿠키를 어떻게 만드는지 설명할 때 눈을 맞추고 귀를 기울이는 거야.'},
+  {n:'이바지',d:'모두 함께 쿠키를 만들 때 물러앉아 있지 않고 저마다 맡은 일을 하면서 더 좋은 생각을 보태는 거야.'},
+  {n:'성실',d:'날마다 꾸준히 집에 돌아와서 나눔장터에 내놓을 쿠키를 스스로 굽는거야. 한번에 몰아서 하면 너무너무 힘든거 아니?'},
+  {n:'심사숙고',d:'친구들에게 어떤 쿠키를 만들어 줄지 곰곰히 따져보고 깊이 생각해 보는 거야.'},
+  {n:'겸손',d:'쿠키를 내가 얼마나 잘만들었는지 떠벌리지 않아. 그저 잠자코 제 할일만 하지.'},
+  {n:'창의',d:'새로운 쿠키를 끊임없이 생각해보고 표현해보는 거야.'},
+  {n:'진실',d:'누가 보든 안보든 중요하지 않아. 내 쿠키가 아니니까 가져가면 안된다는 건 당연한거야.'},
+  {n:'호기심',d:'쿠키에 대해 하나부터 열까지 모두모두 궁금해. 궁금한 것은 다 알고 싶어!'}
+];
+// 설명이 생기기 전에 저장된 목록(이름만 있는 옛 데이터)이면 기본 설명을 채워 준다.
+//   설명이 하나라도 들어 있으면 교사가 직접 손본 목록이므로 그대로 존중한다.
+function _fillDefaultDescs(arr){
+  if(!arr.length||arr.some(c=>c.d)) return arr;
+  return arr.map(c=>{
+    const d=DEFAULT_COOKIES.find(x=>x.n===c.n);
+    return d?{n:c.n,d:d.d}:c;
+  });
+}
+let COOKIE_LIST=DEFAULT_COOKIES.map(c=>({...c}));
+let recordMode='personal';
+// 쿠키 선택은 최대 3개씩, 각각 {n:이름, stars:1~5, reason:이유}
+let clsBright=[],clsImprove=[];
+let clsLocked=false;
+let _clsSaveTimer=null,_clsCtx='',_clsPending=null;
+let _clsMyApproved=false;   // 내 응답이 승인됐는지(잠금 판단용)
+let _clsRejReason='';       // 반려 사유(알림창에서 다시 보기)
+let _clsRejAt='';           // 반려 시각 — 같은 사유로 다시 반려해도 새 알림으로 잡기 위한 표식
+/* 배너 대신 쓰는 공용 알림창 — 제출/승인/마감을 예쁜 창으로 알린다 */
+function showClsNotice(icon,title,msg,grad,shadow){
+  const set=(id,v,prop)=>{const el=document.getElementById(id);if(el){if(prop)el.style[prop]=v;else el.textContent=v;}};
+  set('clsNoticeIcon',icon); set('clsNoticeTitle',title); set('clsNoticeMsg',msg);
+  const head=document.getElementById('clsNoticeHead');
+  if(head) head.style.background=grad||'linear-gradient(135deg,#FF7BA9,#FF5C8D)';
+  const ok=document.getElementById('clsNoticeOk');
+  if(ok){ ok.style.background=grad||'linear-gradient(135deg,#FF7BA9,#FF5C8D)'; ok.style.boxShadow='0 4px 0 '+(shadow||'#D94F75'); }
+  document.getElementById('clsNoticeModal')?.classList.remove('hidden');
+}
+function closeClsNotice(){ document.getElementById('clsNoticeModal')?.classList.add('hidden'); }
+const _clsClosedSeen=new Set();   // 마감 안내는 회의당 한 번만
+// 반려 알림창 — 새 사유는 회의 탭을 열 때 자동으로 한 번 뜨고, 배너를 눌러 다시 볼 수 있다.
+function showClsRejectNotice(){
+  if(!_clsRejReason) return;
+  const el=document.getElementById('clsRejectNoticeMsg');
+  if(el) el.textContent=_clsRejReason;
+  document.getElementById('clsRejectNoticeModal')?.classList.remove('hidden');
+}
+function closeClsRejectNotice(){
+  document.getElementById('clsRejectNoticeModal')?.classList.add('hidden');
+  // 새로고침해도 같은 사유로 다시 뜨지 않도록 확인 표시를 남긴다
+  try{ if(me&&cmCurrent) localStorage.setItem('cls_rejSeen_'+cmCurrent+'_'+me.cd,_clsRejAt||_clsRejReason); }catch(e){}
+}
+let cmCurrent='';                                   // 학생이 보고 있는 회의 id
+let _cmList={},_cmOrder={},_cmHidden={},_cmStatus={};
+
+const _clsRef=(mid,cd)=>saengRef.child('classRecords/'+mid+'/'+cd);
+const _clsDraftKey=(mid,cd)=>'sw_clsdraft_'+cd+'_'+mid;
+function _clsEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function _cmLabel(id){return _cmList[id]||id;}
+
+/* ─────────── 쿠키 목록 ─────────── */
+// 저장 형식은 [{n,d}]. 예전에 저장된 문자열 배열도 그대로 읽는다(설명 없는 쿠키로 승격).
+function _normCookies(v){
+  let raw=[];
+  if(Array.isArray(v)) raw=v;
+  else if(typeof v==='string') raw=v.split('\n');
+  else if(v&&typeof v==='object') raw=Object.values(v);
+  const out=[],seen=new Set();
+  raw.forEach(x=>{
+    let n='',d='';
+    if(typeof x==='string'){
+      const i=x.indexOf('|');
+      n=(i<0?x:x.slice(0,i)).trim();
+      d=(i<0?'':x.slice(i+1)).trim();
+    }else if(x&&typeof x==='object'){
+      n=String(x.n||'').trim(); d=String(x.d||'').trim();
+    }
+    if(!n||seen.has(n)) return;   // 같은 이름이 둘이면 집계가 갈린다
+    seen.add(n); out.push({n,d});
+  });
+  return out;
+}
+function _cookieNames(){return COOKIE_LIST.map(c=>c.n);}
+function _cookieDesc(n){const c=COOKIE_LIST.find(c=>c.n===n);return c?c.d:'';}
+function _cookiesToText(list){return list.map(c=>c.d?`${c.n} | ${c.d}`:c.n).join('\n');}
+async function loadCookieList(){
+  try{
+    const arr=_fillDefaultDescs(_normCookies((await saengRef.child('settings/cookieList').once('value')).val()));
+    if(arr.length) COOKIE_LIST=arr;
+  }catch(e){}
+  return COOKIE_LIST;
+}
+function loadCookieListToSettings(){
+  saengRef.child('settings/cookieList').once('value',snap=>{
+    const arr=_fillDefaultDescs(_normCookies(snap.val()));
+    COOKIE_LIST=arr.length?arr:DEFAULT_COOKIES.map(c=>({...c}));
+    const ta=document.getElementById('cookieListInput');
+    if(ta) ta.value=_cookiesToText(COOKIE_LIST);
+    const lb=document.getElementById('cookieCountLabel');
+    if(lb) lb.textContent=`현재 ${COOKIE_LIST.length}개 (설명 ${COOKIE_LIST.filter(c=>c.d).length}개)`;
+  });
+}
+async function saveCookieList(){
+  const arr=_normCookies(document.getElementById('cookieListInput')?.value||'');
+  if(!arr.length) return alert('쿠키를 최소 1개는 남겨주세요.');
+  await saengRef.child('settings/cookieList').set(arr);
+  COOKIE_LIST=arr;
+  const lb=document.getElementById('cookieCountLabel');
+  if(lb) lb.textContent=`현재 ${arr.length}개 (설명 ${arr.filter(c=>c.d).length}개)`;
+  toast('✅ 쿠키 목록 저장 완료!');
+}
+function resetCookieList(){
+  const ta=document.getElementById('cookieListInput');
+  if(ta) ta.value=_cookiesToText(DEFAULT_COOKIES);
+  const lb=document.getElementById('cookieCountLabel');
+  if(lb) lb.textContent=`${DEFAULT_COOKIES.length}개 (저장 눌러야 적용)`;
+}
+
+/* ─────────── 회의 목록 (생성/순서/숨김/마감) ─────────── */
+async function loadMeetings(){
+  const [l,h,o,st]=await Promise.all([
+    saengRef.child('cm_list').once('value'),
+    saengRef.child('cm_hidden').once('value'),
+    saengRef.child('cm_order').once('value'),
+    saengRef.child('cm_status').once('value')
+  ]);
+  _cmList=l.val()||{}; _cmHidden=h.val()||{}; _cmOrder=o.val()||{}; _cmStatus=st.val()||{};
+  // 순서 없던 항목에 삽입 순서대로 타임스탬프 부여 (월 목록과 같은 방식)
+  const missing=[];
+  l.forEach(c=>{if(!_cmOrder[c.key]) missing.push(c.key);});
+  if(missing.length){
+    const base=Date.now()-missing.length*1000, up={};
+    missing.forEach((k,i)=>{const t=base+i*1000;up[k]=t;_cmOrder[k]=t;});
+    await saengRef.child('cm_order').update(up);
+  }
+  return _cmList;
+}
+function sortedMeetings(){
+  return Object.entries(_cmList).sort((a,b)=>(_cmOrder[a[0]]||0)-(_cmOrder[b[0]]||0));
+}
+function _cmIsActive(id){return (_cmStatus[id]?.status||'active')==='active';}
+
+async function addClassMeeting(){
+  const inp=document.getElementById('addCmInput');
+  const label=(inp?.value||'').trim();
+  if(!label) return alert('회의 제목을 입력해주세요');
+  await loadMeetings(); // 다른 기기에서 방금 만든 회의도 잡도록 최신화
+  if(Object.values(_cmList).some(v=>String(v).trim()===label)
+     && !confirm(`같은 이름의 회의가 이미 있어요: "${label}"\n그래도 새로 만들까요?`)) return;
+  // id는 라벨과 무관한 새 값 — 이름이 같아도 기록이 섞이지 않는다
+  const id='c'+Date.now().toString(36);
+  await saengRef.child('cm_list/'+id).set(label);
+  await saengRef.child('cm_order/'+id).set(Date.now());
+  await saengRef.child('cm_status/'+id).set({status:'active',opened_at:Date.now()});
+  _cmList[id]=label; _cmOrder[id]=Date.now(); _cmStatus[id]={status:'active'};
+  populateCmSelector();
+  const sel=document.getElementById('tCmSel'); if(sel) sel.value=id;
+  renderCmManageList();
+  loadClassOverview(false,1);
+  if(inp) inp.value='';
+  toast('✅ '+label+' 추가됨');
+}
+async function renameMeeting(id){
+  const cur=_cmLabel(id);
+  const next=prompt('새 제목 입력:',cur);
+  if(!next||!next.trim()||next.trim()===cur) return;
+  await saengRef.child('cm_list/'+id).set(next.trim());
+  _cmList[id]=next.trim();
+  populateCmSelector(); renderCmManageList();
+  toast('✏️ 제목 수정됨');
+}
+async function toggleHideMeeting(id){
+  const now=!!_cmHidden[id];
+  if(now){ await saengRef.child('cm_hidden/'+id).remove(); delete _cmHidden[id]; }
+  else{ await saengRef.child('cm_hidden/'+id).set(true); _cmHidden[id]=true; }
+  renderCmManageList();
+  toast(now?'👁️ 학생에게 표시됨':'🙈 학생에게 숨김');
+}
+async function toggleMeetingStatus(id){
+  const active=_cmIsActive(id);
+  const next=active?'closed':'active';
+  await saengRef.child('cm_status/'+id).update(
+    next==='active'?{status:'active',opened_at:Date.now()}:{status:'closed',closed_at:Date.now()});
+  _cmStatus[id]={...(_cmStatus[id]||{}),status:next};
+  renderCmManageList();
+  toast(next==='active'?'▶️ 회의 진행 — 학생이 쓸 수 있어요':'⏹️ 회의 마감 — 학생은 읽기만 가능');
+}
+async function deleteMeeting(id){
+  const label=_cmLabel(id);
+  if(!confirm(`'${label}' 회의를 삭제할까요?\n학생들이 쓴 응답도 모두 삭제됩니다.\n되돌릴 수 없습니다.`)) return;
+  await Promise.all([
+    saengRef.child('classRecords/'+id).remove(),
+    saengRef.child('cm_list/'+id).remove(),
+    saengRef.child('cm_order/'+id).remove(),
+    saengRef.child('cm_hidden/'+id).remove(),
+    saengRef.child('cm_status/'+id).remove()
+  ]);
+  delete _cmList[id]; delete _cmOrder[id]; delete _cmHidden[id]; delete _cmStatus[id];
+  populateCmSelector(); renderCmManageList(); loadClassOverview();
+  toast('🗑️ 삭제됨');
+}
+async function bulkApproveMeeting(id){
+  const snap=await saengRef.child('classRecords/'+id).once('value');
+  const recs=snap.val()||{};
+  const targets=Object.keys(recs).filter(cd=>recs[cd]&&recs[cd].status!=='approved');
+  if(!targets.length) return alert('승인할 기록이 없습니다.\n(제출된 기록이 없거나 이미 모두 승인됨)');
+  // 아직 제출하지 않은(작성 중) 학생까지 승인하면 그 학생은 더 못 고친다.
+  //   몇 명이 그런 상태인지 반드시 알리고 확인받는다.
+  const notYet=targets.filter(cd=>(recs[cd].status||'draft')==='draft').length;
+  if(!confirm(`'${_cmLabel(id)}'의 ${targets.length}명 응답을 모두 승인할까요?`
+      +(notYet?`\n\n⚠️ 이 중 ${notYet}명은 아직 제출하지 않은 '작성 중' 상태예요.\n승인하면 그 학생은 더 이상 고칠 수 없습니다.`:'')
+      +`\n\n승인하면 학생은 수정할 수 없게 됩니다.`)) return;
+  const up={};
+  targets.forEach(cd=>{ up[cd+'/status']='approved'; up[cd+'/rejected_reason']=''; up[cd+'/approved_at']=Date.now(); });
+  await saengRef.child('classRecords/'+id).update(up);
+  toast(`✅ ${targets.length}명 일괄 승인 완료`);
+  if(id===_clsViewMid) targets.forEach(cd=>_clsPatchLocal(cd,{status:'approved',rejected_reason:''}));
+  loadClassOverview(false,1);
+}
+function populateCmSelector(){
+  const sel=document.getElementById('tCmSel');
+  if(!sel) return;
+  const keep=sel.value;
+  const entries=sortedMeetings();
+  sel.innerHTML=entries.length?entries.map(([id,label])=>
+    `<option value="${_clsEsc(id)}">${_clsEsc(label)}${_cmIsActive(id)?'':' (마감)'}${_cmHidden[id]?' 🙈':''}</option>`).join('')
+    :'<option value="">회의 없음</option>';
+  if(keep&&_cmList[keep]) sel.value=keep;
+}
+async function renderCmManageList(){
+  const wrap=document.getElementById('cmManageList');
+  if(!wrap) return;
+  const entries=sortedMeetings();
+  if(!entries.length){wrap.innerHTML='<div style="color:#bbb;font-size:13px;padding:8px;">아직 만든 회의가 없습니다</div>';return;}
+  wrap.innerHTML=entries.map(([id,label])=>{
+    const hidden=!!_cmHidden[id], active=_cmIsActive(id);
+    const e=id.replace(/'/g,"\\'");
+    return `<div class="month-row" draggable="true" data-val="${id}" ondragstart="onCmDragStart(event,'${e}')" ondragover="onMonthDragOver(event)" ondragleave="onMonthDragLeave(event)" ondrop="onCmDrop(event,'${e}')" ondragend="onMonthDragEnd(event)" style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#FFF0F5;border:2px solid #FFD6E0;border-radius:10px;flex-wrap:wrap;cursor:grab;">
+      <span style="flex:1;min-width:80px;font-size:15px;color:${hidden?'#aaa':'#333'};${hidden?'text-decoration:line-through;':''}">${_clsEsc(label)}</span>
+      <span style="font-size:12px;color:${active?'#2E7D32':'#999'};">${active?'진행 중':'마감'}</span>
+      <button class="pink-btn soft" onclick="renameMeeting('${e}')">수정</button>
+      <button class="pink-btn soft" onclick="toggleHideMeeting('${e}')">${hidden?'🙈 숨기기 중':'👁️ 보이기 중'}</button>
+      <button class="pink-btn" onclick="toggleMeetingStatus('${e}')">${active?'마감':'열기'}</button>
+      <button class="pink-btn" onclick="bulkApproveMeeting('${e}')">승인</button>
+      <button class="pink-btn deep" onclick="deleteMeeting('${e}')">삭제</button>
+    </div>`;
+  }).join('');
+}
+let _dragCm=null;
+function onCmDragStart(e,id){_dragCm=id;e.dataTransfer.effectAllowed='move';e.currentTarget.style.opacity='.4';}
+async function onCmDrop(e,targetId){
+  e.preventDefault();
+  e.currentTarget.style.borderColor='#FFD6E0';
+  if(!_dragCm||_dragCm===targetId) return;
+  const ids=sortedMeetings().map(([v])=>v);
+  const from=ids.indexOf(_dragCm), to=ids.indexOf(targetId);
+  if(from<0||to<0) return;
+  ids.splice(from,1); ids.splice(to,0,_dragCm);
+  const base=Date.now()-ids.length*1000, up={};
+  ids.forEach((k,i)=>{const t=base+i*1000;up[k]=t;_cmOrder[k]=t;});
+  await saengRef.child('cm_order').update(up);
+  _dragCm=null; // 드롭 후 반드시 비운다 (월 목록의 onMonthDragEnd는 _dragMonth만 지운다)
+  renderCmManageList(); populateCmSelector();
+}
+
+/* ─────────── 쿠키 그리드 ─────────── */
+function buildCookieGrids(){
+  ['bright','improve'].forEach(type=>{
+    const c=document.getElementById(type+'Cookies');
+    if(!c) return;
+    c.innerHTML='';
+    const grid=document.createElement('div');
+    grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;';
+    COOKIE_LIST.forEach((ck,i)=>{
+      const el=document.createElement('div');
+      el.className='gem-chip gc'+(i%8);
+      el.dataset.name=ck.n; el.dataset.ctype=type;
+      el.innerHTML=`<span class="gem-icon">🍪</span><span class="gem-label">${_clsEsc(ck.n)}</span>`;
+      el.onclick=()=>toggleCookie(type,ck.n,el);
+      grid.appendChild(el);
+    });
+    c.appendChild(grid);
+  });
+  _paintCookieSel();
+}
+function toggleCookie(type,name,el){
+  // 잠겨 있어도 설명·별점은 볼 수 있어야 한다 (마감·승인된 회의를 다시 읽을 때)
+  const list=_pickList(type);
+  const cur=list.find(p=>p.n===name);
+  if(clsLocked){
+    if(cur) openPickModal(type,name,true); else showCookieInfoPopup(name,el);
+    return;
+  }
+  if(!cur && list.length>=CLS_PICK_MAX){
+    showCookieInfoPopup(name,el);
+    toast(`쿠키는 ${CLS_PICK_MAX}개까지 고를 수 있어요 — 먼저 고른 쿠키를 지우고 다시 골라 주세요`);
+    return;
+  }
+  openPickModal(type,name,false);
+}
+// 보석(showGemInfoPopup)과 같은 말풍선 — 선택을 풀 때도 설명은 그대로 띄운다
+let _cookieInfoTimer=null;
+function showCookieInfoPopup(name,el){
+  const def=_cookieDesc(name);
+  if(!def||!el) return;
+  document.getElementById('cookieInfoPopup')?.remove();
+  clearTimeout(_cookieInfoTimer);
+  const popup=document.createElement('div');
+  popup.id='cookieInfoPopup';
+  popup.style.cssText='position:fixed;z-index:9999;background:linear-gradient(135deg,#C98A4B,#A9682F);color:white;padding:12px 18px;border-radius:16px;font-size:17px;max-width:300px;line-height:1.6;word-break:keep-all;box-shadow:0 6px 24px rgba(140,90,40,.45);pointer-events:none;animation:popIn .15s ease;';
+  popup.innerHTML=`<b style="font-size:19px;">🍪 ${_clsEsc(name)}</b><br><span style="font-size:16px;opacity:.95">${_clsEsc(def)}</span>`;
+  document.body.appendChild(popup);
+  const r=el.getBoundingClientRect(), w=popup.offsetWidth||300, h=popup.offsetHeight||110;
+  let left=r.left+r.width/2-w/2, top=r.bottom+10;
+  if(left+w>window.innerWidth-8) left=window.innerWidth-w-8;
+  if(left<8) left=8;
+  if(top+h>window.innerHeight-8) top=r.top-h-10;
+  if(top<8) top=8;
+  popup.style.left=left+'px'; popup.style.top=top+'px';
+  _cookieInfoTimer=setTimeout(()=>{popup.parentNode&&popup.remove();},4000);
+}
+/* ─────────── 쿠키 선택(3개) + 별점·이유 ─────────── */
+const CLS_PICK_MAX=3;
+// 빛났던 쿠키는 '잘한 점'을 고르는 자리다 — 낮은 별에도 깎아내리는 말 대신 자라는 말로 쓴다.
+const STAR_WORDS=['','조금씩 빛나고 있어요','제법 빛나요','꽤 잘하고 있어요','아주 잘하고 있어요','정말 눈부셔요!'];
+const FLAME_WORDS=['','조금만 더 노력해요','노력이 필요해요','꽤 노력해야 해요','많이 노력해야 해요','아주 많이 노력해야 해요'];
+function _pickList(type){return type==='bright'?clsBright:clsImprove;}
+// 빛났던 쿠키=별점, 앞으로 빛날 쿠키=불꽃 점수. 표시 갈래(입력창·내 선택목록·교사카드·집계)를 모두 type으로 맞춘다.
+function _isFlame(type){return type==='improve';}
+// ⚠ 불꽃은 HTML 조각을 돌려준다(꺼진 불꽃 = 흑백 처리). innerHTML 자리에서만 쓸 것 — textContent에 넣지 말 것.
+function _stars(n,type){
+  n=Math.max(0,Math.min(5,Number(n)||0));
+  if(!_isFlame(type)) return '★'.repeat(n)+'☆'.repeat(5-n);
+  return '🔥'.repeat(n)+'<span style="filter:grayscale(1);opacity:.35;">'+'🔥'.repeat(5-n)+'</span>';
+}
+
+function _paintCookieSel(){
+  ['bright','improve'].forEach(type=>{
+    const list=_pickList(type);
+    const names=list.map(p=>p.n);
+    const full=list.length>=CLS_PICK_MAX;
+    document.querySelectorAll('#'+type+'Cookies .gem-chip').forEach(el=>{
+      const on=names.includes(el.dataset.name);
+      el.classList.toggle('selected',on);
+      el.classList.toggle('full',full&&!on);   // 정원이 찼을 때 못 고르는 쿠키를 흐리게
+    });
+    const st=document.getElementById(type+'Status');
+    if(st){
+      st.textContent=`${list.length} / ${CLS_PICK_MAX} 선택`+(full?' — 다 골랐어요!':'');
+      st.classList.toggle('done',full);
+    }
+    const wrap=document.getElementById(type+'Picks');
+    // 쿠키 이름을 onclick 문자열에 넣지 않는다 — 이름에 따옴표가 있으면(교사가 목록을 편집한다)
+    //   HTML 파서가 엔티티를 되돌려 인라인 스크립트가 깨진다. 인덱스로만 넘긴다.
+    if(wrap) wrap.innerHTML=list.map((p,i)=>`
+      <div class="pick-item" onclick="openPickAt('${type}',${i})">
+        <span class="pi-name">🍪 ${_clsEsc(p.n)}</span>
+        <span class="pi-stars">${_stars(p.stars,type)}</span>
+        <span class="pi-reason">${_clsEsc(p.reason)||'(이유 없음)'}</span>
+        ${clsLocked?'':`<span class="pi-x" onclick="event.stopPropagation();removePick('${type}',${i})">✕</span>`}
+      </div>`).join('');
+  });
+}
+
+let _pickCtx=null; // {type,name,readonly}
+function openPickAt(type,i){
+  const p=_pickList(type)[i];
+  if(p) openPickModal(type,p.n,clsLocked);
+}
+function openPickModal(type,name,readonly){
+  const cur=_pickList(type).find(p=>p.n===name);
+  _pickCtx={type,name,readonly:!!readonly||clsLocked};
+  document.getElementById('pickTitle').textContent=name;
+  document.getElementById('pickDesc').textContent=_cookieDesc(name)||'';
+  document.getElementById('pickDesc').style.display=_cookieDesc(name)?'':'none';
+  document.getElementById('pickStarLabel').textContent=(type==='bright')
+    ? '우리 반은 이 쿠키를 얼마나 잘 하고 있나요?'
+    : '우리 반은 이 쿠키를 얼마나 더 노력해야 하나요?';
+  _pickSetStars(cur?cur.stars:0);
+  const ta=document.getElementById('pickReason');
+  ta.value=cur?(cur.reason||''):'';
+  ta.disabled=_pickCtx.readonly;
+  _pickCount();
+  document.getElementById('pickRemoveBtn').style.display=(cur&&!_pickCtx.readonly)?'':'none';
+  document.querySelector('#pickModal .pick-btn.ok').style.display=_pickCtx.readonly?'none':'';
+  document.getElementById('pickModal').classList.remove('hidden');
+  if(!_pickCtx.readonly) setTimeout(()=>ta.focus(),120);
+}
+function closePickModal(){
+  document.getElementById('pickModal').classList.add('hidden');
+  _pickCtx=null;
+}
+let _pickStars=0;
+function _pickSetStars(n){
+  _pickStars=Math.max(0,Math.min(5,Number(n)||0));
+  const wrap=document.getElementById('pickStars');
+  const flame=_isFlame(_pickCtx&&_pickCtx.type);
+  wrap.innerHTML=[1,2,3,4,5].map(i=>`<span class="pick-star${flame?' flame':''}${i<=_pickStars?' on':''}" onclick="${_pickCtx&&_pickCtx.readonly?'':`_pickSetStars(${i})`}">${flame?'🔥':'★'}</span>`).join('');
+  document.getElementById('pickStarWord').textContent=_pickStars?(flame?FLAME_WORDS:STAR_WORDS)[_pickStars]:(flame?'불꽃을 눌러 주세요':'별을 눌러 주세요');
+}
+function _pickCount(){
+  const ta=document.getElementById('pickReason');
+  const min=charLimits.brightReason||0;
+  const cc=document.getElementById('cc_pickReason');
+  if(cc){
+    cc.textContent=min>0?`${ta.value.length}자 (최소 ${min}자)`:`${ta.value.length}자`;
+    cc.classList.toggle('warn',min>0&&ta.value.length>0&&ta.value.length<min);
+  }
+}
+function savePickFromModal(){
+  if(!_pickCtx||_pickCtx.readonly) return closePickModal();
+  const {type,name}=_pickCtx;
+  const reason=document.getElementById('pickReason').value.trim();
+  if(!_pickStars) return alert(_isFlame(type)?'불꽃 점수를 골라 주세요 🔥':'별점을 골라 주세요 ⭐');
+  const min=charLimits.brightReason||0;
+  if(min>0&&reason.length<min) return alert(`이유를 최소 ${min}자 이상 써 주세요.`);
+  const list=_pickList(type);
+  const i=list.findIndex(p=>p.n===name);
+  if(i>=0) list[i]={n:name,stars:_pickStars,reason};
+  else{
+    if(list.length>=CLS_PICK_MAX) return alert(`쿠키는 ${CLS_PICK_MAX}개까지만 고를 수 있어요.`);
+    list.push({n:name,stars:_pickStars,reason});
+  }
+  closePickModal();
+  _paintCookieSel();
+  clsAutoSave();
+}
+function removePickFromModal(){
+  if(!_pickCtx||_pickCtx.readonly) return;
+  const {type,name}=_pickCtx;
+  const i=_pickList(type).findIndex(p=>p.n===name);
+  closePickModal();
+  if(i>=0) removePick(type,i);
+}
+function removePick(type,i){
+  if(clsLocked) return;
+  const list=_pickList(type);
+  if(i<0||i>=list.length) return;
+  list.splice(i,1);
+  _paintCookieSel();
+  clsAutoSave();
+}
+
+/* ─────────── 학생: 모드·회의 탭 ─────────── */
+// 화면 전환만 담당한다(제목·표시). 어떤 회의/월을 볼지는 상단 탭이 정한다.
+function setRecordMode(mode){
+  recordMode=mode;
+  document.getElementById('personalFormArea').classList.toggle('hidden',mode!=='personal');
+  document.getElementById('classFormArea').classList.toggle('hidden',mode!=='class');
+  const t=document.getElementById('stuRecordTitle');
+  if(!t) return;
+  t.textContent=(mode==='class')
+    ? '🏛️ '+(cmCurrent?_cmLabel(cmCurrent):'학급회의')
+    : `📖 ${_monthsCache[currentMonth]||currentMonth} 생활기록부`;
+}
+// 기본 선택: 진행 중인 회의 중 가장 마지막에 만든 것, 없으면 목록의 마지막
+function _cmDefaultPick(){
+  const visible=sortedMeetings().filter(([id])=>!_cmHidden[id]);
+  const actives=visible.filter(([id])=>_cmIsActive(id));
+  const pick=(actives.length?actives:visible).slice(-1)[0];
+  return pick?pick[0]:'';
+}
+async function initStudentMeetings(){
+  await loadMeetings();
+  const visible=sortedMeetings().filter(([id])=>!_cmHidden[id]);
+  // 보고 있던 회의가 아직 살아 있으면 그대로 유지 (목록 갱신이 선택을 흔들지 않도록)
+  if(!visible.some(([id])=>id===cmCurrent)) cmCurrent=_cmDefaultPick();
+  buildCmTabs();
+  // ⚠️ 여기서 한 번 읽어 둬야 '학급회의 탭을 열지 않은 학생'에게도 승인/반려가 바로 뜬다.
+  //   개인 생활기록부는 로그인 때 loadMyRecord가 리스너를 붙지만, 학급회의는 탭을 눌러야
+  //   clsLoadMyRecord가 돌아서 리스너가 없었다 — 그래서 반려 알림이 안 왔다.
+  if(cmCurrent) clsLoadMyRecord();
+}
+// 탭은 상단 한 줄(buildStudentMonthTabs)로 합쳤다. 여기선 회의 유무에 따른 폼 표시만 맡는다.
+function buildCmTabs(){
+  const has=sortedMeetings().some(([id])=>!_cmHidden[id]);
+  document.getElementById('clsNoMeeting')?.classList.toggle('hidden',has);
+  document.querySelectorAll('#classFormArea .ability-grid, #classFormArea .teacher-section, #classFormArea .submit-area')
+    .forEach(el=>el.classList.toggle('hidden',!has));
+  buildStudentMonthTabs();
+}
+function switchMeeting(id){
+  if(id===cmCurrent&&recordMode==='class') return;
+  _clsFlush();                 // 이전 회의의 대기 저장 확정
+  cmCurrent=id;
+  setRecordMode('class');
+  buildCmTabs();
+  clsLoadMyRecord();
+  // 회의 목록은 cm_* 실시간 리스너가 최신으로 유지한다 — 리스너가 없을 때만(교사 화면 등) 직접 읽는다.
+  //   예전엔 학생이 탭을 누를 때마다 목록 4건을 다시 읽어 30명이면 헛읽기가 수백 건씩 쌓였다.
+  if(!_visRefs.length) loadMeetings().then(()=>{ if(recordMode==='class'){ buildCmTabs(); } }).catch(()=>{});
+}
+
+/* ─────────── 학생: 폼 ↔ 데이터 ─────────── */
+function clsCollect(status){
+  const g=id=>(document.getElementById(id)?.value||'');
+  return{
+    // picks_*가 정본. bright/improve(문자열)는 예전 형식과의 호환을 위해 1순위 이름만 함께 남긴다.
+    picks_bright:clsBright.map(p=>({n:p.n,stars:p.stars||0,reason:p.reason||''})),
+    picks_improve:clsImprove.map(p=>({n:p.n,stars:p.stars||0,reason:p.reason||''})),
+    bright:clsBright[0]?clsBright[0].n:'', bright_reason:clsBright[0]?(clsBright[0].reason||''):'',
+    improve:clsImprove[0]?clsImprove[0].n:'', improve_reason:clsImprove[0]?(clsImprove[0].reason||''):'',
+    good:g('clsGood'), bad:g('clsBad'), wish:g('clsWish'),
+    status:status||'draft',
+    student_name:me?me.nm:'', student_no:(me&&me.no!=null)?me.no:null,
+    updated_at:Date.now()
+  };
+}
+// 저장된 값 → 선택 배열. picks_*가 없으면 예전 단일 선택 형식(bright/bright_reason)을 승격시킨다.
+function _normPicks(picks,legacyName,legacyReason){
+  let arr=[];
+  if(Array.isArray(picks)) arr=picks;
+  else if(picks&&typeof picks==='object') arr=Object.values(picks);
+  arr=arr.filter(p=>p&&typeof p==='object'&&String(p.n||'').trim())
+         .map(p=>({n:String(p.n).trim(),stars:Math.max(0,Math.min(5,Number(p.stars)||0)),reason:String(p.reason||'')}));
+  if(!arr.length&&String(legacyName||'').trim()) arr=[{n:String(legacyName).trim(),stars:0,reason:String(legacyReason||'')}];
+  // 같은 쿠키가 두 번 들어가면 집계가 갈린다
+  const seen=new Set();
+  return arr.filter(p=>seen.has(p.n)?false:(seen.add(p.n),true)).slice(0,CLS_PICK_MAX);
+}
+function clsFill(d){
+  d=d||{};
+  clsBright=_normPicks(d.picks_bright,d.bright,d.bright_reason);
+  clsImprove=_normPicks(d.picks_improve,d.improve,d.improve_reason);
+  const put=(id,v)=>{const el=document.getElementById(id);if(el){el.value=v||'';countChars(el);}};
+  put('clsGood',d.good); put('clsBad',d.bad); put('clsWish',d.wish);
+  _paintCookieSel();
+  const st=d.status||'';
+  _clsRejReason=(st==='rejected')?(d.rejected_reason||'(사유 없음)'):'';   // 배너 없음 — 알림창이 맡는다
+}
+function clsResetForm(){ clsFill({}); }
+function clsSetLocked(locked){
+  clsLocked=locked;
+  ['clsGood','clsBad','clsWish'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled=locked;
+  });
+  ['clsSaveBtn','clsSubmitBtn'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.disabled=locked;
+  });
+  _paintCookieSel(); // 잠금 상태에 따라 ✕ 버튼 표시가 달라진다
+}
+
+/* ─────────── 학생: 로드 ─────────── */
+async function clsLoadMyRecord(){
+  if(!me) return;
+  _detachMyClsRecord();   // 이전 회의의 상태 리스너 정리
+  if(!cmCurrent){ clsResetForm(); clsSetLocked(true); return; }
+  const mid=cmCurrent, ctx=mid+'/'+me.cd;
+  _clsCtx=ctx;
+  clsResetForm();
+  clsSetLocked(true);        // 확인 전까지는 잠금 (개인 기록과 같은 정책)
+  let server=null;
+  try{ server=(await _clsRef(mid,me.cd).once('value')).val(); }catch(e){}
+  if(_clsCtx!==ctx) return;  // 로딩 중 회의/학생이 바뀌면 폐기
+  // 로컬 draft가 서버보다 새로우면 로컬 우선 (탭 종료·오프라인 대비)
+  let draft=null;
+  try{ const raw=localStorage.getItem(_clsDraftKey(mid,me.cd)); if(raw) draft=JSON.parse(raw); }catch(e){}
+  const sTs=Number(server&&server.updated_at)||0, dTs=Number(draft&&draft.updated_at)||0;
+  clsFill((dTs>sTs)?{...(server||{}),...draft}:(server||{}));
+  const closed=!_cmIsActive(mid);
+  const approved=(server&&server.status)==='approved';
+  _clsMyApproved=approved;   // 마감/재개 실시간 반영(_clsSyncLock)이 승인 잠금을 풀지 않도록
+  clsSetLocked(closed||approved);
+  // 마감된 회의는 배너 대신 알림창으로 한 번만 알린다(탭을 보고 있을 때만)
+  if(closed&&recordMode==='class'&&!_clsClosedSeen.has(mid)){
+    _clsClosedSeen.add(mid);
+    showClsNotice('📖','마감된 회의예요','읽기만 할 수 있어요.\n선생님이 다시 열면 고칠 수 있어요.',
+      'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
+  }
+  // 내 응답의 상태만 실시간으로 지켜본다 — 선생님이 반려/승인하면 새로고침 없이 바로 반영.
+  //   ⚠️ 폼 내용은 절대 건드리지 않는다(작성 중 글을 서버 값으로 덮으면 안 된다).
+  _listenMyClsRecord(mid,me.cd);
+}
+let _clsMyRef=null,_clsMyCb=null;
+function _detachMyClsRecord(){
+  if(_clsMyRef&&_clsMyCb){ try{ _clsMyRef.off('value',_clsMyCb); }catch(e){} }
+  _clsMyRef=null; _clsMyCb=null;
+}
+function _listenMyClsRecord(mid,cd){
+  _detachMyClsRecord();
+  _clsMyRef=_clsRef(mid,cd);
+  let last=null, first=true;
+  _clsMyCb=_clsMyRef.on('value',s=>{
+    if(!me||me.cd!==cd||cmCurrent!==mid) return;   // 탭/학생이 바뀐 뒤 온 콜백은 폐기
+    const v=s.val()||{};
+    // rejected_at 까지 키에 넣어야 '같은 사유로 다시 반려'도 새 알림으로 잡힌다
+    const key=(v.status||'')+' '+(v.rejected_reason||'')+' '+(v.rejected_at||'');
+    if(key===last) return;                         // 내 자동저장 echo로 화면을 흔들지 않는다
+    last=key;
+    _clsApplyStatus(v.status||'', v.rejected_reason||'', first, v.rejected_at||'');
+    first=false;
+  });
+}
+// 상태(제출/승인/반려)만 화면에 반영. 입력칸은 손대지 않는다.
+//   first=1 이면 화면을 처음 열며 받은 값이라 알림창을 띄우지 않는다(반려는 예외 — 확인 전이면 띄운다).
+function _clsApplyStatus(st,reason,first,rejAt){
+  const closed=!_cmIsActive(cmCurrent);
+  _clsMyApproved=(st==='approved');
+  _clsRejReason=(st==='rejected')?(reason||'(사유 없음)'):'';
+  _clsRejAt=(st==='rejected')?String(rejAt||''):'';
+  clsSetLocked(closed||_clsMyApproved);
+  if(_clsRejReason){
+    if(closed) return;
+    // 아직 확인하지 않은 반려면 알림창을 띄운다.
+    //   ⚠️ 예전엔 '사유 텍스트'로 확인 여부를 판단해, 같은 문구로 다시 반려하면 창이 안 떴다.
+    //     반려 시각(rejected_at)으로 판단한다(옛 기록은 시각이 없으니 사유 텍스트로 폴백).
+    const mark=_clsRejAt||_clsRejReason;
+    let seen='';
+    try{ seen=localStorage.getItem('cls_rejSeen_'+cmCurrent+'_'+me.cd)||''; }catch(e){}
+    if(seen!==mark) showClsRejectNotice();
+    return;
+  }
+  if(first) return;   // 방금 켰을 때의 현재 상태로는 창을 띄우지 않는다
+  if(st==='submitted') showClsNotice('📮','제출 완료!','선생님이 확인하실 거예요 🌟\n확인 전까지는 고쳐서 다시 낼 수 있어요.',
+      'linear-gradient(135deg,#FF7BA9,#FF5C8D)','#D94F75');
+  else if(st==='approved') showClsNotice('🎉','선생님이 확인했어요!','우리 반 의견으로 잘 받았어요.\n이제 고칠 수 없어요.',
+      'linear-gradient(135deg,#66BB6A,#2E7D32)','#1B5E20');
+}
+
+/* ─────────── 학생: 저장 ─────────── */
+function clsAutoSave(){
+  if(!me||clsLocked||!cmCurrent) return;
+  const d=clsCollect(null);
+  delete d.status;  // 자동저장이 제출/승인 상태를 draft로 되돌리지 않도록
+  try{ localStorage.setItem(_clsDraftKey(cmCurrent,me.cd),JSON.stringify(d)); }catch(e){}
+  clearTimeout(_clsSaveTimer);
+  // 대기 중 쓰기는 "발화 시점"이 아니라 입력 시점의 회의/학생으로 박제한다.
+  //   2초 안에 회의 탭을 바꾸면 이전 회의 글이 새 회의에 저장되던 류의 사고를 막는다.
+  _clsPending={mid:cmCurrent,cd:me.cd,d};
+  _clsSaveTimer=setTimeout(_clsFlush,2000);
+}
+function _clsFlush(){
+  clearTimeout(_clsSaveTimer); _clsSaveTimer=null;
+  const p=_clsPending; _clsPending=null;
+  if(!p) return;
+  // 선생님이 방금 지운 회의로는 쓰지 않는다 — 지운 회의 아래 아무도 못 보는 유령 노드가 되살아난다.
+  //   (목록을 아직 못 받은 기기는 판단 불가이므로 그대로 쓴다)
+  if(Object.keys(_cmList).length && _cmList[p.mid]===undefined) return;
+  _clsRef(p.mid,p.cd).update(p.d).catch(()=>{});
+}
+async function clsSaveRecord(status){
+  if(!me) return;
+  if(!cmCurrent) return alert('열린 학급회의가 없어요.');
+  if(clsLocked) return alert('지금은 읽기만 가능해요.');
+  // 이 저장이 최신이므로 대기 중 자동저장은 버린다 (나중에 발화해 덮어쓰지 않도록)
+  clearTimeout(_clsSaveTimer); _clsSaveTimer=null; _clsPending=null;
+  const mid=cmCurrent, cd=me.cd;
+  const d=clsCollect(status||'draft');
+  if(status==='submitted'){ d.submitted_at=Date.now(); d.rejected_reason=''; }
+  try{
+    await _clsRef(mid,cd).update(d);
+    try{ localStorage.removeItem(_clsDraftKey(mid,cd)); }catch(e){}
+    // 제출 완료 안내는 상태 리스너가 예쁜 창으로 띄운다(배너 없음)
+    if(status!=='submitted') toast('💾 임시저장 완료');
+    return true;
+  }catch(e){
+    showClsNotice('⚠️','저장하지 못했어요','인터넷 연결을 확인하고 다시 눌러주세요.\n\n'+(e&&e.message||''),
+      'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
+    return false;
+  }
+}
+async function clsSubmitRecord(){
+  if(clsLocked) return alert('지금은 읽기만 가능해요.');
+  const miss=[];
+  const minR=charLimits.brightReason||0;
+  const chkPicks=(list,label,type)=>{
+    if(list.length<CLS_PICK_MAX){ miss.push(`${label}: ${CLS_PICK_MAX}개를 골라주세요 (지금 ${list.length}개)`); }
+    list.forEach(p=>{
+      if(!p.stars) miss.push(`${label} '${p.n}': ${_isFlame(type)?'불꽃 점수를':'별점을'} 골라주세요`);
+      if(minR>0&&(p.reason||'').trim().length<minR) miss.push(`${label} '${p.n}': 이유를 최소 ${minR}자 이상 써주세요`);
+    });
+  };
+  chkPicks(clsBright,'빛났던 쿠키','bright'); chkPicks(clsImprove,'빛날 쿠키','improve');
+  const chk=(id,label)=>{
+    const el=document.getElementById(id), min=charLimits[id]||0;
+    if(min>0&&(el?.value||'').trim().length<min) miss.push(`${label}: 최소 ${min}자 이상 써주세요`);
+  };
+  chk('clsGood','좋았던 점 / 감사 나누기'); chk('clsBad','아쉬웠던 점'); chk('clsWish','해결방안');
+  // 개인 생활기록부와 같은 예쁜 창을 쓴다(예전엔 alert/confirm이었다)
+  if(miss.length) return showSubmitErrorModal(miss);
+  showSubmitConfirmModal(()=>{ clsSaveRecord('submitted'); });
+}
+
+/* ─────────── 교사: 제출 현황·집계 ─────────── */
+let _clsRecords={},_clsViewMid='';
+// skipMeta=1 : 회의 목록(cm_list/hidden/order/status 4건)을 다시 읽지 않는다.
+//   승인·반려·삭제 직후처럼 회의 목록이 바뀔 리 없는 호출에서 낭비를 줄인다.
+async function loadClassOverview(force,skipMeta){
+  const wrap=document.getElementById('classOverviewWrap');
+  if(!skipMeta){
+    await loadMeetings();
+    populateCmSelector();
+    renderCmManageList();
+  }
+  const sel=document.getElementById('tCmSel');
+  const mid=(sel&&sel.value)||(sortedMeetings().slice(-1)[0]||[])[0]||'';
+  if(sel&&mid) sel.value=mid;
+  _clsViewMid=mid;
+  if(!mid){ if(wrap) wrap.innerHTML='<div style="color:#aaa;text-align:center;padding:24px;font-size:15px;">회의를 추가하면 현황이 표시됩니다</div>'; _clsRecords={}; return; }
+  if(wrap&&force===true) wrap.innerHTML='로딩 중...';
+  // 이미 이 회의를 실시간으로 보고 있으면 전체를 다시 받지 않는다.
+  //   (승인/반려/삭제 뒤 호출에서 매번 전체를 재다운로드하던 낭비 제거 +
+  //    읽는 사이 도착한 child_changed 를 옛 스냅샷이 덮어쓰던 레이스도 함께 사라진다)
+  const live=(_clsOvMid===mid&&_clsOvRef);
+  if(!live||force===true){
+    await loadCookieList();
+    try{ _clsRecords=(await saengRef.child('classRecords/'+mid).once('value')).val()||{}; }
+    catch(e){ _clsRecords={}; }
+  }
+  renderClassOverview();
+  _listenClsOverview(mid);   // 학생이 제출하면 새로고침 없이 현황이 갱신되도록
+}
+/* 교사: 이 회의의 응답을 실시간으로 지켜본다.
+   child_* 리스너라 바뀐 학생 1명만 내려온다(value 리스너처럼 전체를 다시 받지 않는다). */
+let _clsOvRef=null,_clsOvCb=null,_clsOvTimer=null,_clsOvMid='';
+function _detachClsOverview(){
+  _clsOvMid='';
+  if(_clsOvRef&&_clsOvCb){
+    try{
+      _clsOvRef.off('child_added',_clsOvCb.a);
+      _clsOvRef.off('child_changed',_clsOvCb.c);
+      _clsOvRef.off('child_removed',_clsOvCb.r);
+    }catch(e){}
+  }
+  clearTimeout(_clsOvTimer); _clsOvTimer=null;
+  _clsOvRef=null; _clsOvCb=null;
+}
+function _listenClsOverview(mid){
+  // 승인/반려마다 다시 붙이면 child_added가 전원 재전송된다 — 같은 회의면 그대로 둔다
+  if(_clsOvRef&&_clsOvMid===mid) return;
+  _detachClsOverview();
+  _clsOvMid=mid;
+  const ref=saengRef.child('classRecords/'+mid);
+  // 여러 명이 동시에 제출해도 렌더는 한 번만(연타 방지)
+  const bump=()=>{ clearTimeout(_clsOvTimer); _clsOvTimer=setTimeout(()=>{ if(_clsViewMid===mid) renderClassOverview(); },400); };
+  const put=s=>{ if(_clsViewMid!==mid) return; _clsRecords[s.key]=s.val(); bump(); };
+  const a=ref.on('child_added',put);
+  const c=ref.on('child_changed',put);
+  const r=ref.on('child_removed',s=>{ if(_clsViewMid!==mid) return; delete _clsRecords[s.key]; bump(); });
+  _clsOvRef=ref; _clsOvCb={a,c,r};
+}
+function renderClassOverview(){
+  const wrap=document.getElementById('classOverviewWrap');
+  if(!wrap) return;
+  const students=((shopData&&shopData.stu)||[]).filter(s=>s.nm);
+  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}));
+  const byCd={}; rows.forEach(r=>byCd[String(r.cd)]=r);
+  const done=rows.filter(r=>r.status==='submitted'||r.status==='approved');
+
+  // 집계는 제출·승인된 응답만 — 임시저장 중인 미완성 응답이 순위를 흔들지 않도록.
+  //   학생 1명이 3개까지 고르므로 선택 배열을 전부 펼쳐서 센다(별점 평균도 함께).
+  const cnt=type=>{
+    const m={};
+    done.forEach(r=>{
+      const who=r.student_name||getStudentName(r.cd)||r.cd;
+      _normPicks(r['picks_'+type],r[type],r[type+'_reason']).forEach(p=>{
+        const e=m[p.n]||(m[p.n]={c:0,sum:0,sn:0,rs:[]});
+        e.c++; if(p.stars){e.sum+=p.stars;e.sn++;}
+        if(String(p.reason||'').trim()) e.rs.push([who,String(p.reason).trim()]);   // 이유 보기용
+      });
+    });
+    return Object.entries(m).map(([n,e])=>[n,e.c,e.sn?(e.sum/e.sn):0,e.rs])
+      .sort((a,b)=>b[1]-a[1]||b[2]-a[2]||a[0].localeCompare(b[0],'ko'));
+  };
+  const bright=cnt('bright'), improve=cnt('improve');
+  const maxB=bright.length?bright[0][1]:0, maxI=improve.length?improve[0][1]:0;
+
+  const STL={none:['미작성','#bbb'],draft:['작성 중','#FFA000'],submitted:['제출','#1565C0'],approved:['승인','#2E7D32'],rejected:['반려','#D32F2F']};
+  // 상태 표 (명단 기준 — 아직 안 쓴 학생도 보여야 한다)
+  const stuRows=students.slice().sort((a,b)=>{
+    const na=parseInt(a.no),nb=parseInt(b.no);
+    const va=isNaN(na)?Infinity:na, vb=isNaN(nb)?Infinity:nb;
+    if(va!==vb) return va-vb;
+    return (a.nm||'').localeCompare(b.nm||'','ko');
+  }).map(s=>{
+    const r=byCd[String(s.cd)];
+    const st=r?(r.status||'draft'):'none';
+    const [lb,col]=STL[st]||STL.none;
+    const t=r&&r.submitted_at?new Date(r.submitted_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'-';
+    return `<tr>
+      <td><span class="stu-link" onclick="window.open(location.pathname+'?stu=${encodeURIComponent(s.cd)}','_blank')">${_clsEsc(s.nm)}</span></td>
+      <td><span style="color:${col};font-weight:bold;${r?'cursor:pointer;text-decoration:underline dotted;':''}" ${r?`onclick="showClsStatusMini('${String(s.cd).replace(/'/g,"\\'")}',event)"`:''}>${lb}</span></td>
+      <td style="font-size:13px;color:#888;">${t}</td>
+    </tr>`;
+  }).join('');
+
+  // 좋아해 모아보기 — 제출·승인된 응답만, 번호순으로 이름과 함께 모은다.
+  //   개별 응답 전체는 상태 클릭(미니창)에서 보므로 여기선 글만 모은다.
+  const doneSorted=done.slice().sort((a,b)=>{
+    const na=Number(a.student_no),nb=Number(b.student_no);
+    const va=isNaN(na)?Infinity:na, vb=isNaN(nb)?Infinity:nb;
+    if(va!==vb) return va-vb;
+    return String(a.student_name||'').localeCompare(String(b.student_name||''),'ko');
+  });
+  const gabItems=field=>doneSorted
+    .map(r=>[r.student_name||getStudentName(r.cd)||r.cd, String(r[field]||'').trim(), r.cd])
+    .filter(x=>x[1]);
+  // 결과 스냅샷 — 아래 카드와 전체화면(⛶)이 같은 데이터를 그린다
+  _clsFs={bright,improve,maxB,maxI,good:gabItems('good'),bad:gabItems('bad'),wish:gabItems('wish')};
+
+  wrap.innerHTML=`
+    <div class="t-card" style="margin-bottom:14px;">
+      <div style="font-size:17px;color:#FF5C8D;font-weight:bold;margin-bottom:10px;">🙋 학생별 제출 현황</div>
+      <table class="status-table"><thead><tr><th>이름</th><th>상태</th><th>제출 시간</th></tr></thead><tbody>${stuRows||'<tr><td colspan="3">학생 명단이 없습니다</td></tr>'}</tbody></table>
+    </div>
+    <div class="t-card clsres" data-rs="0" data-anon="0" style="margin:14px 0;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <div style="font-size:17px;color:#FF5C8D;font-weight:bold;">📊 학급회의 결과</div>
+        <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+          ${_clsToggleBtns(!!window.__clsRs,!!window.__clsAnon)}
+          <button class="pink-btn soft" onclick="openClsFs('all',1)" title="인쇄">🖨</button>
+          <button class="pink-btn" onclick="openClsFs('all')" title="전체 화면">⛶</button>
+        </span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start;margin-bottom:14px;">
+        ${_clsPanelCard('bright')}${_clsPanelCard('improve')}
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start;">
+        ${_clsPanelCard('good')}${_clsPanelCard('bad')}${_clsPanelCard('wish')}
+      </div>
+    </div>
+  `;
+  _clsApplyToggles();   // 다시 그린 뒤에도 이유/익명 선택 유지
+}
+/* ─────────── 회의 결과 패널 + 전체화면 ───────────
+   같은 데이터(_clsFs)를 작은 카드와 전체화면 양쪽에서 그린다. fs=1이면 글씨를 키운다. */
+let _clsFs={bright:[],improve:[],maxB:0,maxI:0,good:[],bad:[],wish:[]};
+// 기본은 '이유 숨기기 중 · 이름 숨기기 중'. 켠 상태는 이 화면을 보는 동안만 유지되고
+//   새로고침하면 다시 기본으로 돌아간다(기기에 저장하지 않는다).
+window.__clsRs   = false;
+window.__clsAnon = true;
+const CLS_PANELS=[
+  {k:'bright', t:'✨ 가장 빛났던 쿠키', c:'#1565C0'},
+  {k:'improve',t:'🔥 앞으로 빛날 쿠키', c:'#C2185B'},
+  {k:'good',   t:'💚 좋았던 점 / 감사 나누기', c:'#2E7D32'},
+  {k:'bad',    t:'🧡 아쉬웠던 점', c:'#EF6C00'},
+  {k:'wish',   t:'💜 해결방안', c:'#6A1B9A'}
+];
+// 순위는 오직 득표수 — 같은 표수면 같은 등수(1,1,3식). 별점/불꽃 평균은 순위와 무관한 참고값이다.
+const CLS_TOP_N=3;   // 순위는 3위까지만 펼쳐 두고 나머지는 + 버튼으로
+function _clsBarHtml(list,max,color,type,fs){
+  if(!list.length) return `<div style="color:#bbb;font-size:${fs?20:14}px;">아직 제출된 표가 없어요</div>`;
+  const rows=list.map(([n,c,avg,rs],i,arr)=>`
+    <div style="margin-bottom:${fs?12:7}px;">
+      <div style="display:flex;align-items:center;gap:${fs?14:10}px;">
+        <div style="width:${fs?34:26}px;text-align:right;font-size:${fs?22:15}px;color:#bbb;">${arr.findIndex(x=>x[1]===c)+1}</div>
+        <div style="width:${fs?190:130}px;font-size:${fs?23:16}px;color:#444;">🍪 ${_clsEsc(n)}</div>
+        <div style="flex:1;background:#f2f2f2;border-radius:8px;overflow:hidden;height:${fs?34:22}px;">
+          <div style="width:${max?Math.round(c/max*100):0}%;height:100%;background:${color};"></div>
+        </div>
+        <div style="width:${fs?62:44}px;font-size:${fs?21:15}px;color:#666;">${c}표</div>
+        <div style="width:${fs?104:78}px;font-size:${fs?20:14}px;color:${_isFlame(type)?'#E64A19':'#FFA000'};" title="${_isFlame(type)?'불꽃 점수 평균':'별점 평균'}">${avg?(_isFlame(type)?'🔥':'★')+avg.toFixed(1):''}</div>
+      </div>
+      ${(rs&&rs.length)?`<div class="rs" style="display:none;margin:${fs?'6px 0 10px':'4px 0 8px'} ${fs?'238px':'166px'};">
+        ${rs.map(([who,txt])=>`<div style="font-size:${fs?18:13}px;color:#666;margin-bottom:3px;white-space:pre-wrap;">
+          <span class="nm" style="color:#FF7BA9;">${_clsEsc(who)}</span> ${_clsEsc(txt)}</div>`).join('')}
+      </div>`:''}
+    </div>`);
+  // 5위까지만 펼쳐 두고, 나머지는 아래 + 버튼으로 연다(인라인 토글이라 새 탭에서도 동작)
+  const rest=rows.length-CLS_TOP_N;
+  if(rest<=0) return rows.join('');
+  return rows.slice(0,CLS_TOP_N).join('')
+    + `<div class="rmore" style="display:none;">${rows.slice(CLS_TOP_N).join('')}</div>`
+    + `<button class="clsmore" title="나머지 ${rest}개" onclick="var w=this.previousElementSibling,on=w.style.display==='none';w.style.display=on?'':'none';this.textContent=on?'−':'+';">+</button>`;
+}
+/* 칸 높이는 '어디에 그리는가'로 정한다 — 화면마다 남는 공간이 다르기 때문.
+   card: 교사 화면의 작은 카드 / fsall: 전체화면(5칸 한눈에) / fsone: 전체화면(이 항목만) */
+const CLS_GAB_H={ card:'300px', fsall:'clamp(200px, calc(100vh - 430px), 620px)', fsone:'calc(100vh - 190px)' };
+function _clsGabHtml(items,color,fs,mode){
+  if(!items.length) return `<div style="font-size:${fs?20:13}px;color:#bbb;">(아직 없어요)</div>`;
+  // 글이 많아도 칸이 화면을 넘지 않도록 높이를 고정하고 그 안에서 스크롤한다
+  return `<div class="clsscroll" style="height:${CLS_GAB_H[mode||'card']||CLS_GAB_H.card};">`
+    + items.map(([nm,v,cd])=>`<div style="background:#FAFAFA;border-radius:10px;padding:${fs?'10px 14px':'7px 10px'};margin-bottom:${fs?8:5}px;">
+    <div class="nm" style="font-size:${fs?17:12}px;color:${color};font-weight:bold;cursor:pointer;" onclick="showClsStatusMini('${String(cd).replace(/'/g,"\\'")}',event)">${_clsEsc(nm)}</div>
+    <div style="font-size:${fs?20:13}px;color:#555;white-space:pre-wrap;line-height:1.5;">${_clsEsc(v)}</div>
+  </div>`).join('')
+    + `</div>`;
+}
+function _clsPanelBody(k,fs,mode){
+  const d=_clsFs;
+  if(k==='bright')  return _clsBarHtml(d.bright, d.maxB,'linear-gradient(90deg,#64B5F6,#1E88E5)','bright', fs);
+  if(k==='improve') return _clsBarHtml(d.improve,d.maxI,'linear-gradient(90deg,#F48FB1,#E91E63)','improve',fs);
+  const p=CLS_PANELS.find(x=>x.k===k)||{c:'#888'};
+  return _clsGabHtml(d[k]||[],p.c,fs,mode);
+}
+// 토글 버튼은 부모 창 함수를 쓰지 않는 인라인 스크립트다 — 새 탭(전체화면)에서도 그대로 동작한다.
+const _BTN_STYLE="border:2px solid #FFD6E0;background:white;color:#FF5C8D;border-radius:10px;font-family:'Jua';font-size:13px;padding:3px 10px;cursor:pointer;";
+// 토글은 결과 영역(.clsres) 전체에 한 번에 걸린다 — 패널마다 따로 누를 필요가 없다.
+const _RS_TOGGLE=`onclick="var p=this.closest('.clsres')||document.querySelector('.clsres'),show=p.getAttribute('data-rs')!=='1';p.setAttribute('data-rs',show?'1':'0');p.querySelectorAll('.rs').forEach(function(e){e.style.display=show?'':'none';});this.textContent=show?'💬 이유 보이기 중':'💬 이유 숨기기 중';window.__clsRs=show;"`;
+const _ANON_TOGGLE=`onclick="var p=this.closest('.clsres')||document.querySelector('.clsres'),anon=p.getAttribute('data-anon')!=='1';p.setAttribute('data-anon',anon?'1':'0');p.querySelectorAll('.nm').forEach(function(e){e.style.display=anon?'none':'';});this.textContent=anon?'🙈 이름 숨기기 중':'🙂 이름 보이기 중';window.__clsAnon=anon;"`;
+function _clsToggleBtns(rs,anon){
+  return `<button class="btn-rs" style="${_BTN_STYLE}" ${_RS_TOGGLE}>${rs?'💬 이유 보이기 중':'💬 이유 숨기기 중'}</button>
+          <button class="btn-anon" style="${_BTN_STYLE}" ${_ANON_TOGGLE}>${anon?'🙈 이름 숨기기 중':'🙂 이름 보이기 중'}</button>`;
+}
+/* 학생이 제출하면 화면이 다시 그려진다 — 그때 켜 둔 이유/익명 상태가 풀리지 않도록 다시 입힌다.
+   (인라인 토글이 window.__clsRs/__clsAnon 에 상태를 남긴다) */
+function _clsApplyToggles(){
+  const p=document.querySelector('#classOverviewWrap .clsres');
+  if(!p) return;
+  const rs=!!window.__clsRs, an=!!window.__clsAnon;
+  p.setAttribute('data-rs',rs?'1':'0'); p.setAttribute('data-anon',an?'1':'0');
+  p.querySelectorAll('.rs').forEach(e=>{e.style.display=rs?'':'none';});
+  p.querySelectorAll('.nm').forEach(e=>{e.style.display=an?'none':'';});
+  const b1=p.querySelector('.btn-rs'), b2=p.querySelector('.btn-anon');
+  if(b1) b1.textContent=rs?'💬 이유 보이기 중':'💬 이유 숨기기 중';
+  if(b2) b2.textContent=an?'🙈 이름 숨기기 중':'🙂 이름 보이기 중';
+}
+function _clsPanelCard(k,fs,mode){
+  const p=CLS_PANELS.find(x=>x.k===k); if(!p) return '';
+  return `<div class="panel" style="border:2px solid #FFE4EF;border-radius:16px;padding:${fs?'16px 18px':'12px 14px'};background:white;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${fs?12:8}px;flex-wrap:wrap;">
+      <div style="font-size:${fs?24:16}px;color:${p.c};font-weight:bold;">${p.t}</div>
+      <button class="clsfs" style="margin-left:auto;" onclick="openClsFs('${p.k}')" title="이 항목만 전체 화면">⛶</button>
+    </div>
+    ${_clsPanelBody(k,fs,mode)}
+  </div>`;
+}
+/* 전체화면 — 'all'(5가지 한눈에) 또는 항목 하나. ‹ › 로 이동, ESC로 닫기 */
+const CLS_FS_SEQ=['all'].concat(CLS_PANELS.map(p=>p.k));
+// 6가지 화면(전체 + 항목 5개)을 미리 그려 새 창에 통째로 넣는다.
+//   새 창은 부모 함수를 못 쓰므로 onclick을 창 안의 go()로 바꾸고, 학생 미니창 클릭은 뗀다.
+function _clsFsView(k){
+  if(k==='all') return `
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start;margin-bottom:16px;">
+      ${_clsPanelCard('bright',0,'fsall')}${_clsPanelCard('improve',0,'fsall')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:start;">
+      ${_clsPanelCard('good',0,'fsall')}${_clsPanelCard('bad',0,'fsall')}${_clsPanelCard('wish',0,'fsall')}
+    </div>`;
+  // 항목 하나만 볼 때도 이유·익명 토글을 쓸 수 있도록 카드째 크게 그린다
+  return `<div style="max-width:1100px;margin:0 auto;">${_clsPanelCard(k,1,'fsone')}</div>`;
+}
+function openClsFs(k,doPrint){
+  const meet=_clsEsc(_cmLabel(_clsViewMid)||'학급회의');
+  const titles={all:'학급회의 결과'};
+  CLS_PANELS.forEach(p=>titles[p.k]=p.t);
+  // 교사 화면에서 켜 둔 이유/익명 설정을 그대로 가지고 연다
+  const rs=!!window.__clsRs, anon=!!window.__clsAnon;
+  let views=`<div class="clsres" data-rs="${rs?1:0}" data-anon="${anon?1:0}">${
+      CLS_FS_SEQ.map(key=>`<div class="fsview" id="v_${key}" style="display:none;">${_clsFsView(key)}</div>`).join('')
+    }</div>`
+    .replace(/onclick="showClsStatusMini\([^"]*\)"/g,'')
+    .replace(/openClsFs\(/g,'go(');
+  if(rs)   views=views.split('class="rs" style="display:none;').join('class="rs" style="');
+  if(anon) views=views.split('class="nm" style="').join('class="nm" style="display:none;');
+  const w=window.open('','_blank');   // 크기 지정 없이 열어야 팝업창이 아니라 새 탭으로 열린다
+  if(!w) return alert('팝업이 차단됐어요. 이 사이트의 팝업을 허용해 주세요.');
+  w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<title>${meet} — 학급회의 결과</title>
+<link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+<style>
+ *{box-sizing:border-box;}
+ body{margin:0;padding:18px 22px 40px;font-family:'Jua',sans-serif;background:linear-gradient(160deg,#FFF6FA,#FFEFF6);color:#444;}
+ .hd{display:flex;align-items:center;gap:10px;margin-bottom:16px;position:sticky;top:0;background:rgba(255,246,250,.95);padding:8px 0;z-index:5;}
+ /* ‹ 제목 › 을 한 덩어리로 묶고, 양옆 여백을 같게 줘서 가운데에 오게 한다 */
+ .hd h1{font-size:24px;color:#FF5C8D;margin:0;white-space:nowrap;}
+ .hd .sp{flex:1;display:flex;align-items:center;gap:8px;}
+ .hd .mid{display:flex;align-items:center;gap:12px;flex-shrink:0;}
+ .nav{border:2px solid #FFD6E0;background:white;color:#FF5C8D;border-radius:12px;font-family:'Jua';font-size:20px;padding:2px 14px;cursor:pointer;}
+ .nav:hover{background:#FFF0F5;}
+ .clsscroll{overflow-y:auto;overscroll-behavior:contain;padding-right:6px;scrollbar-width:thin;scrollbar-color:#FFB1CB #FFF3F7;}
+ .clsscroll::-webkit-scrollbar{width:10px;}
+ .clsscroll::-webkit-scrollbar-track{background:#FFF3F7;border-radius:8px;}
+ .clsscroll::-webkit-scrollbar-thumb{background:#FFB1CB;border-radius:8px;border:2px solid #FFF3F7;}
+ .clsscroll::-webkit-scrollbar-thumb:hover{background:#FF7BA9;}
+ .clsmore{margin-top:6px;width:100%;border:2px dashed #FFD6E0;background:#FFF8FB;color:#FF5C8D;border-radius:12px;font-family:'Jua';font-size:19px;line-height:1;padding:8px 10px;cursor:pointer;}
+ .clsmore:hover{background:#FFF0F5;}
+ .clsfs{border:2px solid #FFD6E0;background:linear-gradient(135deg,#FFFFFF,#FFF0F5);color:#FF5C8D;border-radius:12px;font-family:'Jua';font-size:15px;line-height:1;padding:6px 11px;cursor:pointer;box-shadow:0 2px 0 #FFD6E0;}
+ .clsfs:hover{background:linear-gradient(135deg,#FFF0F5,#FFE4EF);}
+ /* 회의 결과는 가로가 잘 맞는다(순위 막대·3열 배치) */
+ @page{size:A4 landscape;margin:10mm;}
+ /* 인쇄할 땐 접힌 순위와 스크롤 칸을 모두 펼쳐서 빠지는 내용이 없게 한다 */
+ @media print{
+   .hd{display:none;} body{background:white;padding:0;}
+   .panel{break-inside:avoid;page-break-inside:avoid;}
+   .rmore{display:block!important;} .clsmore{display:none!important;}
+   .clsscroll{height:auto!important;max-height:none!important;overflow:visible!important;}
+ }
+</style></head><body>
+<div class="hd">
+  <span class="sp"></span>
+  <span class="mid">
+    <button class="nav" onclick="go(-1)" title="이전 (←)">‹</button>
+    <h1 id="t"></h1>
+    <button class="nav" onclick="go(1)" title="다음 (→)">›</button>
+  </span>
+  <span class="sp" style="justify-content:flex-end;">${_clsToggleBtns(rs,anon)}</span>
+</div>
+${views}
+<script>
+ var SEQ=${JSON.stringify(CLS_FS_SEQ)}, TITLES=${JSON.stringify(titles)}, MEET=${JSON.stringify(meet)}, cur=${JSON.stringify(k)};
+ function go(x){
+   if(typeof x==='number'){ var i=SEQ.indexOf(cur); x=SEQ[(i+x+SEQ.length)%SEQ.length]; }
+   cur=x;
+   for(var j=0;j<SEQ.length;j++) document.getElementById('v_'+SEQ[j]).style.display=(SEQ[j]===cur)?'':'none';
+   document.getElementById('t').textContent='🏛️ '+MEET+' — '+(TITLES[cur]||'');
+ }
+ document.addEventListener('keydown',function(e){
+   if(e.key==='Escape') window.close();
+   else if(e.key==='ArrowRight') go(1);
+   else if(e.key==='ArrowLeft') go(-1);
+ });
+ go(cur);
+ ${doPrint?'window.onload=function(){setTimeout(function(){window.print();},400);};':''}
+<\/script></body></html>`);
+  w.document.close();
+}
+
+/* 상태 클릭 → 미니창 (개인 생활기록부의 showStatusMini와 같은 DOM을 재사용) */
+async function showClsStatusMini(cd,event){
+  if(event) event.stopPropagation();
+  if(!_clsViewMid) return;
+  const mid=_clsViewMid;
+  const mini=document.getElementById('statusMini'), overlay=document.getElementById('statusMiniOverlay');
+  const box=document.getElementById('statusMiniContent');
+  if(!mini||!overlay||!box) return;
+  box.innerHTML='<div style="color:#999;text-align:center;padding:20px;">불러오는 중...</div>';
+  mini.style.left='50%'; mini.style.top='50%'; mini.style.transform='translate(-50%,-50%)';
+  mini.classList.remove('hidden'); overlay.classList.remove('hidden');
+  // 화면 캐시(_clsRecords)는 오래됐을 수 있으니 이 학생 1건만 새로 읽는다(작은 읽기 1회)
+  let r=null;
+  try{ r=(await _clsRef(mid,cd).once('value')).val(); }catch(e){ r=_clsRecords[cd]||null; }
+  if(mid!==_clsViewMid) return;                       // 읽는 사이 회의 탭이 바뀌면 폐기
+  if(mini.classList.contains('hidden')) return;       // 읽는 사이 닫혔으면 폐기
+  const nm=(r&&r.student_name)||getStudentName(cd)||cd;
+  if(!r){ box.innerHTML=`<b style="font-size:15px;">${_clsEsc(nm)} 학생</b><div style="color:#999;margin-top:10px;">아직 작성된 기록이 없습니다.</div>`; return; }
+  const STL={draft:['작성 중','#FFA000'],submitted:['제출','#1565C0'],approved:['승인','#2E7D32'],rejected:['반려','#D32F2F']};
+  const st=r.status||'draft';
+  const [lb,col]=STL[st]||STL.draft;
+  const e=String(cd).replace(/'/g,"\\'");
+  const pb=_normPicks(r.picks_bright,r.bright,r.bright_reason);
+  const pi=_normPicks(r.picks_improve,r.improve,r.improve_reason);
+  const picks=(title,color,list,type)=>`
+    <div style="margin-bottom:12px;">
+      <div style="font-size:12px;color:${color};font-weight:bold;margin-bottom:4px;">${title}</div>
+      ${list.length?list.map(p=>`<div style="background:#FFF9FB;border-radius:8px;padding:7px 10px;margin-bottom:5px;">
+        <div style="font-size:13px;color:#333;">🍪 ${_clsEsc(p.n)} <span style="color:#FFA000;">${_stars(p.stars,type)}</span></div>
+        <div style="font-size:12px;color:#666;white-space:pre-wrap;">${_clsEsc(p.reason)||'(이유 없음)'}</div>
+      </div>`).join(''):'<div style="font-size:12px;color:#bbb;">(없음)</div>'}
+    </div>`;
+  const sec=(title,v,color)=>`<div style="margin-bottom:12px;">
+      <div style="font-size:12px;color:${color};font-weight:bold;margin-bottom:4px;">${title}</div>
+      <div style="font-size:12px;color:#555;background:#FFF9FB;border-radius:8px;padding:7px 10px;white-space:pre-wrap;min-height:20px;">${_clsEsc(v)||'(없음)'}</div>
+    </div>`;
+  box.innerHTML=`
+    <div style="background:linear-gradient(135deg,#FFF0F5,#FFE4EF);border-radius:14px 14px 0 0;margin:-18px -20px 16px;padding:16px 20px;border-bottom:2px solid #FFD6E0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+        <b style="font-size:16px;color:#FF5C8D;">${_clsEsc(nm)} 학생</b>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${st==='approved'?''
+            :`<button class="pink-btn" style="font-size:13px;padding:5px 12px;" onclick="approveClassRecord('${e}',1)">✅ 승인</button>`}
+          <button class="pink-btn soft" style="font-size:13px;padding:5px 12px;" onclick="rejectClassRecord('${e}',1)">🔙 반려</button>
+          <button class="pink-btn deep" style="font-size:13px;padding:5px 12px;" onclick="deleteClassRecord('${e}',1)">🗑 삭제</button>
+        </div>
+      </div>
+      <div style="font-size:12px;color:#aaa;margin-top:2px;">${_clsEsc(_cmLabel(mid)||'학급회의')} · <b style="color:${col};">${lb}</b>${r.submitted_at?' · '+new Date(r.submitted_at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):''}</div>
+    </div>
+    ${picks('✨ 가장 빛났던 쿠키','#1565C0',pb,'bright')}
+    ${picks('🔥 앞으로 빛날 쿠키','#C2185B',pi,'improve')}
+    ${sec('좋았던 점 / 감사 나누기',r.good,'#2E7D32')}
+    ${sec('아쉬웠던 점',r.bad,'#EF6C00')}
+    ${sec('해결방안',r.wish,'#6A1B9A')}
+    ${st==='rejected'&&r.rejected_reason?`<div style="background:#FFF3E0;border-radius:10px;padding:8px 12px;font-size:12px;color:#E65100;">반려 사유: ${_clsEsc(r.rejected_reason)}</div>`:''}`;
+}
+// fromMini=1 이면 미니창을 다시 그린다(삭제만 닫는다)
+async function approveClassRecord(cd,fromMini){
+  if(!_clsViewMid) return;
+  await _clsRef(_clsViewMid,cd).update({status:'approved',rejected_reason:'',approved_at:Date.now()});
+  toast('✅ 승인 완료');
+  _clsPatchLocal(cd,{status:'approved',rejected_reason:''});
+  loadClassOverview(false,1);
+  if(fromMini) showClsStatusMini(cd);
+}
+async function unapproveClassRecord(cd,fromMini){
+  if(!_clsViewMid) return;
+  await _clsRef(_clsViewMid,cd).update({status:'submitted',approved_at:null});
+  toast('↩️ 승인 취소 — 학생이 다시 수정할 수 있어요');
+  _clsPatchLocal(cd,{status:'submitted'});
+  loadClassOverview(false,1);
+  if(fromMini) showClsStatusMini(cd);
+}
+function rejectClassRecord(cd,fromMini){
+  if(!_clsViewMid) return;
+  const cur=(_clsRecords[cd]&&_clsRecords[cd].rejected_reason)||'';
+  if(fromMini) closeStatusMini();
+  openRejectModal(cd,_clsViewMid,cur,'class',fromMini?1:0);
+}
+async function deleteClassRecord(cd,fromMini){
+  if(!_clsViewMid) return;
+  const nm=getStudentName(cd)||cd;
+  if(!confirm(`${nm} 학생의 이 회의 응답을 삭제할까요?\n되돌릴 수 없습니다.`)) return;
+  await _clsRef(_clsViewMid,cd).remove();
+  toast('🗑️ 삭제됨');
+  delete _clsRecords[cd];   // 리스너(0.4초 디바운스)보다 먼저 화면에서 지운다
+  if(fromMini) closeStatusMini();
+  loadClassOverview(false,1);
+}
+/* 서버 쓰기 직후, 리스너(0.4초 디바운스)보다 먼저 화면 캐시에 반영한다.
+   이걸 안 하면 승인을 눌러도 잠깐 옛 상태가 보인다. 필드 단위 병합이라 다른 필드는 건드리지 않는다. */
+function _clsPatchLocal(cd,patch){
+  if(_clsRecords[cd]) Object.assign(_clsRecords[cd],patch);
+}
+function exportClassCsv(){
+  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}));
+  if(!rows.length) return alert('내보낼 기록이 없어요.');
+  const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const head=['번호','이름','상태'];
+  for(let i=1;i<=CLS_PICK_MAX;i++) head.push(`빛났던 쿠키${i}`,`별점${i}`,`이유${i}`);
+  for(let i=1;i<=CLS_PICK_MAX;i++) head.push(`빛날 쿠키${i}`,`불꽃점수${i}`,`이유${i}`);
+  head.push('좋았던 점/감사 나누기','아쉬웠던 점','해결방안');
+  const lab={draft:'작성중',submitted:'제출',approved:'승인',rejected:'반려'};
+  const lines=[head.map(q).join(',')];
+  const cells=list=>{
+    const out=[];
+    for(let i=0;i<CLS_PICK_MAX;i++){const p=list[i];out.push(p?p.n:'',p&&p.stars?p.stars:'',p?p.reason:'');}
+    return out;
+  };
+  rows.forEach(r=>lines.push([r.student_no,r.student_name||getStudentName(r.cd),lab[r.status]||'작성중',
+    ...cells(_normPicks(r.picks_bright,r.bright,r.bright_reason)),
+    ...cells(_normPicks(r.picks_improve,r.improve,r.improve_reason)),
+    r.good,r.bad,r.wish].map(q).join(',')));
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`학급회의_${(_cmLabel(_clsViewMid)||'').replace(/[\\/:*?"<>|]/g,'_')}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+/* ═══ PDF 다운로드 (학생 1명 = 1페이지) ═══
+   인쇄 창을 띄우면 브라우저가 붙이는 머리글/바닥글(날짜·about:blank·1/1)을 끌 수 없다.
+   → 화면 밖에 페이지를 그려 캔버스로 뜬 뒤 jsPDF로 바로 파일을 내려받는다(창이 뜨지 않음). */
+const PDF_W=794;   // A4 210mm @96dpi
+const PDF_H=1123;  // A4 297mm
+function _pdfCss(sel){
+  return `
+ ${sel} .page{width:${PDF_W}px;min-height:${PDF_H}px;padding:58px 52px;background:white;font-family:'Jua',sans-serif;color:#333;box-sizing:border-box;}
+ ${sel} .page *{box-sizing:border-box;}
+ ${sel} .hd{border-bottom:2px solid #F0F0F0;padding-bottom:10px;margin-bottom:18px;display:flex;align-items:baseline;gap:8px;}
+ ${sel} .hd .nm{font-size:24px;color:#333;}
+ ${sel} .hd .no{font-size:13px;color:#aaa;}
+ ${sel} .hd .sub{font-size:12px;color:#bbb;margin-left:auto;}
+ ${sel} h3{display:inline-block;font-size:13px;font-weight:normal;margin:18px 0 8px;padding:4px 14px;border-radius:999px;background:#F3F4F6;color:#777;letter-spacing:.3px;}
+ ${sel} h3.c-bright{background:#E8F1FE;color:#1565C0;}
+ ${sel} h3.c-improve{background:#FDE9F1;color:#C2185B;}
+ ${sel} h3.c-good{background:#E8F6EA;color:#2E7D32;}
+ ${sel} h3.c-bad{background:#FFF1E2;color:#EF6C00;}
+ ${sel} h3.c-wish{background:#F3E9FA;color:#6A1B9A;}
+ ${sel} .box{background:#FAFAFA;border-radius:10px;padding:11px 14px;font-size:14px;line-height:1.7;white-space:pre-wrap;min-height:24px;}
+ ${sel} .item{padding:7px 0;border-bottom:1px solid #F2F2F2;}
+ ${sel} .item:last-child{border-bottom:none;}
+ ${sel} .item .t{font-size:14px;margin-bottom:1px;}
+ ${sel} .item .r{font-size:13px;color:#888;white-space:pre-wrap;}
+ ${sel} .two{display:flex;gap:26px;}
+ ${sel} .two>div{flex:1;min-width:0;}
+ ${sel} .tag{display:inline-block;background:#F5F5F5;border-radius:10px;padding:2px 10px;font-size:13px;margin:0 4px 4px 0;color:#555;}
+ ${sel} img.draw{max-width:260px;max-height:190px;border:1px solid #eee;border-radius:8px;display:block;margin-top:6px;}`;
+}
+function _loadScriptOnce(src){
+  return new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src=src; s.onload=res; s.onerror=()=>rej(new Error('load fail: '+src));
+    document.head.appendChild(s);
+  });
+}
+async function _ensurePdfLibs(){
+  if(!window.html2canvas) await _loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  if(!window.jspdf) await _loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+}
+async function _savePdf(filename,pagesHtml){
+  toast('📄 PDF 만드는 중...');
+  try{ await _ensurePdfLibs(); }
+  catch(e){ alert('PDF 변환기를 불러오지 못했어요(인터넷 확인).'); return; }
+  const host=document.createElement('div');
+  host.id='_pdfHost';
+  host.style.cssText='position:fixed;left:-20000px;top:0;z-index:-1;background:white;';
+  host.innerHTML=`<style>${_pdfCss('#_pdfHost')}</style>`+pagesHtml;
+  document.body.appendChild(host);
+  try{
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'p',unit:'mm',format:'a4'});
+    const pages=host.querySelectorAll('.page');
+    for(let i=0;i<pages.length;i++){
+      const cv=await window.html2canvas(pages[i],{scale:2,backgroundColor:'#ffffff',useCORS:true,logging:false});
+      if(i) doc.addPage();
+      // 글이 아주 길어 한 장을 넘으면 잘라내지 말고 살짝 줄여서 한 장에 담는다(학생 1명 = 1페이지 유지)
+      let w=210, h=cv.height*210/cv.width;
+      if(h>297){ h=297; w=cv.width*297/cv.height; }
+      doc.addImage(cv.toDataURL('image/jpeg',0.9),'JPEG',(210-w)/2,0,w,h);
+    }
+    doc.save(filename.replace(/[\\/:*?"<>|]/g,'_')+'.pdf');
+    toast('✅ PDF 저장 완료');
+  }catch(e){
+    alert('PDF 만들기 실패: '+(e&&e.message||e));
+  }finally{
+    document.body.removeChild(host);
+  }
+}
+// 학급회의 — 화면에 이미 읽어 둔 _clsRecords를 그대로 쓴다(추가 읽기 0)
+function exportClassPdf(){
+  if(!_clsViewMid) return alert('먼저 회의를 선택하세요.');
+  const meet=_cmLabel(_clsViewMid)||'학급회의';
+  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}))
+    .sort((a,b)=>{
+      const na=Number(a.student_no),nb=Number(b.student_no);
+      const va=isNaN(na)?Infinity:na, vb=isNaN(nb)?Infinity:nb;
+      if(va!==vb) return va-vb;
+      return String(a.student_name||'').localeCompare(String(b.student_name||''),'ko');
+    });
+  if(!rows.length) return alert('내보낼 기록이 없어요.');
+  const picks=(list,type)=>list.length?list.map(p=>`<div class="item">
+      <div class="t">${_clsEsc(p.n)} <span style="color:#FFA000;">${_stars(p.stars,type)}</span></div>
+      <div class="r">${_clsEsc(p.reason)||'(이유 없음)'}</div></div>`).join(''):'<div class="box">(없음)</div>';
+  const pages=rows.map(r=>{
+    const nm=r.student_name||getStudentName(r.cd)||r.cd;
+    return `<div class="page">
+      <div class="hd"><span class="nm">${_clsEsc(nm)}</span>
+        <span class="no">${r.student_no!=null&&r.student_no!==''?_clsEsc(r.student_no)+'번':''}</span></div>
+      <div class="two">
+        <div><h3 class="c-bright">✨ 가장 빛났던 쿠키</h3>${picks(_normPicks(r.picks_bright,r.bright,r.bright_reason),'bright')}</div>
+        <div><h3 class="c-improve">🔥 앞으로 빛날 쿠키</h3>${picks(_normPicks(r.picks_improve,r.improve,r.improve_reason),'improve')}</div>
+      </div>
+      <h3 class="c-good">💚 좋았던 점 / 감사 나누기</h3><div class="box">${_clsEsc(r.good)||'(없음)'}</div>
+      <h3 class="c-bad">🧡 아쉬웠던 점</h3><div class="box">${_clsEsc(r.bad)||'(없음)'}</div>
+      <h3 class="c-wish">💜 해결방안</h3><div class="box">${_clsEsc(r.wish)||'(없음)'}</div>
+    </div>`;
+  }).join('');
+  _savePdf(`학급회의_${meet}`,pages);
+}
+// 생활기록부 — 선택한 월의 기록/추천/달고나를 학생별로 한 장씩
+async function exportRecordsPdf(){
+  const month=document.getElementById('tMonthSel')?.value;
+  if(!month) return alert('먼저 월을 선택하세요.');
+  const label=_monthsCache[month]||month;
+  toast('📄 PDF 준비 중...');
+  let recs={},noms={},dals={};
+  try{
+    const [rS,nS,dS]=await Promise.all([
+      saengRef.child('records/'+month).once('value'),
+      saengRef.child('nominations').orderByKey().startAt(month+'_').endAt(month+'_').once('value'),
+      saengRef.child('dalgona').orderByKey().startAt(month+'_').endAt(month+'_').once('value')
+    ]);
+    recs=rS.val()||{}; noms=nS.val()||{}; dals=dS.val()||{};
+  }catch(e){ return alert('불러오기 실패: '+e.message); }
+  const rows=Object.entries(recs).map(([cd,r])=>({cd,...(r||{})}))
+    .sort((a,b)=>{
+      const na=Number(a.student_no),nb=Number(b.student_no);
+      const va=isNaN(na)?Infinity:na, vb=isNaN(nb)?Infinity:nb;
+      if(va!==vb) return va-vb;
+      return String(a.student_name||getStudentName(a.cd)||'').localeCompare(String(b.student_name||getStudentName(b.cd)||''),'ko');
+    });
+  if(!rows.length) return alert('내보낼 기록이 없어요.');
+  // 달고나 그림 URL (있는 학생만 1건씩)
+  const drawUrl={};
+  await Promise.all(rows.map(async r=>{
+    const d=dals[month+'_'+r.cd+'_dalgona'];
+    if(!d) return;
+    const ref=d.drawingRef||('student_'+r.cd+'_'+month);
+    try{ const s=await firebase.database().ref('ClassData/EventShop/drawings/'+ref).once('value'); if(s.val()) drawUrl[r.cd]=s.val(); }catch(e){}
+  }));
+  // Firebase가 희소 배열을 객체로 돌려주는 경우가 있어 값만 뽑아 쓴다(빈칸으로 새는 것 방지)
+  const tags=arr=>{
+    const a=Array.isArray(arr)?arr:(arr&&typeof arr==='object'?Object.values(arr):[]);
+    const v=a.filter(n=>String(n||'').trim());
+    return v.length?v.map(n=>`<span class="tag">${_clsEsc(n)}</span>`).join(''):'(없음)';
+  };
+  const nomBox=(n,title)=>`<h3>${title}</h3><div class="box">${n?`→ <b>${_clsEsc(n.to_name||'?')}</b>\n${_clsEsc(n.reason||'')}`:'(없음)'}</div>`;
+  const pages=rows.map(r=>{
+    const nm=r.student_name||getStudentName(r.cd)||r.cd;
+    const def=noms[month+'_'+r.cd+'_defender'], pro=noms[month+'_'+r.cd+'_promising'], dal=dals[month+'_'+r.cd+'_dalgona'];
+    const gift=!dal?'':(dal.gift==='cookie'?'🍪 간식(5쿠키)':('❤️ 마음 : '+_clsEsc(dal.gift_heart||'')));
+    return `<div class="page">
+      <div class="hd"><span class="nm">${_clsEsc(nm)}</span>
+        <span class="no">${r.student_no!=null&&r.student_no!==''?_clsEsc(r.student_no)+'번':''}</span>
+        <span class="sub">${_clsEsc(label)}</span></div>
+      <h3 class="c-bad">💎 부족했던 능력</h3><div class="box">${tags(r.lack_names)}</div>
+      <h3 class="c-bad">이유 · 성장계획</h3><div class="box">${_clsEsc(r.lack_reason)||'(없음)'}\n★ ${_clsEsc(r.growth_plan)||''}</div>
+      <h3 class="c-bright">💎 가득했던 능력</h3><div class="box">${tags(r.full_names)}</div>
+      <h3 class="c-bright">이유 · 나만의 비법</h3><div class="box">${_clsEsc(r.full_reason)||'(없음)'}\n★ ${_clsEsc(r.my_secret)||''}</div>
+      <h3>✉️ 선생님께</h3><div class="box">${_clsEsc(r.teacher_msg)||'(없음)'}</div>
+      <div class="two">
+        <div>${nomBox(def,'🛡️ 방어자')}</div>
+        <div>${nomBox(pro,'🌟 유망주')}</div>
+      </div>
+      <h3 class="c-wish">🍬 달고나</h3>
+      <div class="box">${dal?`→ <b>${_clsEsc(dal.to_name||'?')}</b> | ${gift}\n${_clsEsc(dal.message||'')}`:'(없음)'}
+        ${drawUrl[r.cd]?`<img class="draw" src="${_clsEsc(drawUrl[r.cd])}">`:''}</div>
+    </div>`;
+  }).join('');
+  _savePdf(`생활기록부_${label}`,pages);
+}
+
 function toast(msg){
   const el=document.getElementById('toast');
   el.textContent=msg;el.style.opacity='1';
