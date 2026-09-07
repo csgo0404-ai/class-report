@@ -156,10 +156,11 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 /* ── 달고나 ── */
 .dalgona-section{background:linear-gradient(135deg,#FFF8E1,#FFF3CD);border-radius:24px;padding:24px;margin-bottom:20px;border:3px solid #FFCA28;box-shadow:0 4px 16px rgba(255,202,40,.2);}
 .dalgona-section h3{font-size:38px;color:#E65100;margin-bottom:22px;text-align:center;}
-.dalgona-from-badge{display:inline-block;background:#FFCA28;color:#4E342E;padding:4px 16px;border-radius:20px;font-size:16px;}
+.dalgona-from-badge{display:inline-flex;align-items:center;box-sizing:border-box;width:100%;background:white;color:#4E342E;font-weight:bold;padding:16px 18px;border:2.5px solid #FFCA28;border-radius:14px;font-family:'Jua';font-size:26px;}
 .dalgona-inner{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:16px;}
 .dalgona-left,.dalgona-right{display:flex;flex-direction:column;gap:10px;}
-.canvas-wrap{background:white;border-radius:16px;border:3px solid #FFCA28;padding:10px;text-align:center;}
+.canvas-wrap{background:white;border-radius:16px;border:3px solid #FFCA28;padding:10px;text-align:center;box-sizing:border-box;height:420px;display:flex;flex-direction:column;}
+.canvas-wrap .canvas-tools{flex-shrink:0;}
 #dalgonaCanvas{border-radius:10px;touch-action:none;}
 .canvas-tools{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:8px;}
 .color-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:.15s;flex-shrink:0;}
@@ -193,6 +194,14 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 .btn-submit:disabled,.btn-save:disabled{background:#ddd;box-shadow:none;cursor:not-allowed;color:#999;border-color:#ddd;}
 .submitted-banner{background:linear-gradient(135deg,#E8F5E9,#F1F8E9);border:3px solid #81C784;border-radius:20px;padding:20px;text-align:center;font-size:18px;color:#2E7D32;margin-bottom:16px;}
 .rejected-banner{background:linear-gradient(135deg,#FFF3E0,#FFF8E1);border:3px solid #FFA726;border-radius:20px;padding:20px;margin-bottom:16px;}
+/* 제출완료/승인/반려 배너는 화면에서 뺀다(요청: "생활기록부에 뜨는 승인·반려 메시지 제거") —
+   제출버튼 라벨("📮 제출하기"/"✅ 제출됨")이 이미 같은 정보를 전달하고,
+   반려는 별도 알림창(rejectionNoticeModal)이 한 번 띄워 준다.
+   ⚠️ DOM 에서 지우면 안 된다 — autoSave/saveRecord 가 이 배너의 hidden 클래스 상태를 읽어서
+   "지금 제출/승인/반려 표시 중인가"를 판단하고, 그때는 로컬 draft 의 status 를 건드리지 않는다
+   (안 그러면 자동저장이 서버 상태를 조용히 draft 로 되돌리는 문제가 재발한다).
+   그래서 로직은 그대로 두고 CSS 로만 안 보이게 한다. */
+#submittedBanner,#rejectedBanner{display:none!important;}
 .rejected-banner h4{color:#E65100;margin-bottom:8px;}
 
 /* ── 부저 오버레이 (학생) ── */
@@ -346,7 +355,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 @keyframes popIn{from{transform:scale(.88);opacity:0;}to{transform:scale(1);opacity:1;}}
 @keyframes spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
 /* 툴바(색상)와 굵기바를 각각 별도 행으로 분리 — 같은 행에 두면 transform:scale 확대 시 가로로 겹침 */
-.canvas-wrap.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#FFF8E7;padding:16px;display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto auto 1fr;grid-template-areas:'. tools .' '. brush .' 'canvas canvas canvas';gap:4px 24px;align-items:start;justify-items:center;}
+.canvas-wrap.fullscreen{position:fixed;top:0;left:0;right:0;bottom:0;height:auto;z-index:9999;background:#FFF8E7;padding:16px;display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto auto 1fr;grid-template-areas:'. tools .' '. brush .' 'canvas canvas canvas';gap:4px 24px;align-items:start;justify-items:center;}
 .canvas-wrap.fullscreen .canvas-tools{grid-area:tools;}
 .canvas-wrap.fullscreen .brush-size-row{grid-area:brush;width:auto !important;}
 .canvas-wrap.fullscreen canvas{grid-area:canvas;justify-self:center;align-self:center;}
@@ -434,7 +443,10 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
   </div>
 
   <div class="record-wrap">
-    <div class="record-header">
+    <!-- 위 탭 줄(생활기록부[월]·학급회의)에 이미 같은 정보가 있어 중복 — 화면에서만 숨김.
+         JS(stuRecordTitle.textContent 갱신, setRecordMode 등)는 그대로 둔다: 요소를 지우면
+         해당 코드들이 null 참조로 죽는다. -->
+    <div class="record-header" style="display:none;">
       <h1 id="stuRecordTitle">✨ 생활기록부</h1>
     </div>
 
@@ -451,10 +463,9 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
     <div class="ability-grid">
       <div class="ability-section lack">
         <div class="section-title"><span>💎</span><span>나에게 <span style="color:#FF7BA9">부족했던</span> 능력과 그 이유</span></div>
-        <div class="section-sub">(학습, 생활태도, 교우관계, 1인1역) — 능력을 클릭하면 설명이 보여요!</div>
         <div class="gem-grid" id="lackGems"></div>
         <div class="field-label">선택한 이유</div>
-        <textarea class="form-textarea" id="lackReason" placeholder="왜 부족했나요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
+        <textarea class="form-textarea" id="lackReason" placeholder="어떤 점이 부족했나요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
         <div class="char-counter" id="cc_lackReason">0 / 200</div>
         <div class="field-label star" style="margin-top:10px;">성장계획</div>
         <textarea class="form-textarea" id="growthPlan" placeholder="어떻게 성장할 계획인가요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
@@ -462,10 +473,9 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       </div>
       <div class="ability-section full">
         <div class="section-title"><span>💎</span><span>나에게 <span style="color:#4FC3F7">가득했던</span> 능력과 그 이유</span></div>
-        <div class="section-sub">(학습, 생활태도, 교우관계, 1인1역) — 능력을 클릭하면 설명이 보여요!</div>
         <div class="gem-grid" id="fullGems"></div>
         <div class="field-label">선택한 이유</div>
-        <textarea class="form-textarea" id="fullReason" placeholder="왜 가득했나요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
+        <textarea class="form-textarea" id="fullReason" placeholder="어떻게 가득채웠나요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
         <div class="char-counter" id="cc_fullReason">0 / 200</div>
         <div class="field-label star" style="margin-top:10px;">나만의 비법</div>
         <textarea class="form-textarea" id="mySecret" placeholder="어떤 비법이 있나요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
@@ -488,7 +498,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
 <div class="nom-label" style="font-size:19px;color:#666;margin-bottom:12px;line-height:1.5;text-align:center;">친절한 말과 행동으로 우리 반을 더 좋은 반으로 만드는 친구</div>
 <div class="nom-label">이번 달 방어자로 추천하는 친구</div>
 
-        <select class="nom-select" id="defenderSelect" onchange="autoSave()"><option value="">-- 친구 선택 --</option></select>
+        <select class="nom-select" id="defenderSelect" onchange="checkNomDuplicate('defenderSelect');autoSave()"><option value="">-- 친구 선택 --</option></select>
         <div class="nom-label">이유</div>
         <textarea class="form-textarea" id="defenderReason" placeholder="왜 방어자인가요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
         <div class="char-counter" id="cc_defenderReason">0 / 200</div>
@@ -498,7 +508,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <h3>🔥 유망주</h3>
 <div class="nom-label" style="font-size:19px;color:#666;margin-bottom:12px;line-height:1.5;text-align:center;">지난 달과 비교해 말과 행동이 성장한 친구</div>
 <div class="nom-label">이번 달 유망주로 추천하는 친구</div>
-        <select class="nom-select" id="promisingSelect" onchange="autoSave()"><option value="">-- 친구 선택 --</option></select>
+        <select class="nom-select" id="promisingSelect" onchange="checkNomDuplicate('promisingSelect');autoSave()"><option value="">-- 친구 선택 --</option></select>
         <div class="nom-label">이유</div>
         <textarea class="form-textarea" id="promisingReason" placeholder="왜 유망주인가요?" rows="3" oninput="countChars(this);autoSave()"></textarea>
         <div class="char-counter" id="cc_promisingReason">0 / 200</div>
@@ -517,17 +527,16 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       </h3>
 
 
-      <div style="display:flex;gap:16px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
-        <div><div class="nom-label">보내는 사람</div><div class="dalgona-from-badge" id="dalgonaFrom"></div></div>
-        <div style="font-size:24px;">💌</div>
-        <div style="flex:1;min-width:150px;"><div class="nom-label">받는 사람</div>
-          <select class="nom-select" id="dalgonaTo" style="border-color:#FFCA28;" onchange="autoSave()"><option value="">-- 친구 선택 --</option></select>
-        </div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px;">
+        <div class="nom-label" style="margin-bottom:0;flex-shrink:0;">보내는 사람</div>
+        <div class="dalgona-from-badge" id="dalgonaFrom" style="flex:1;min-width:120px;"></div>
+        <div class="nom-label" style="margin-bottom:0;flex-shrink:0;">받는 사람</div>
+        <select class="nom-select" id="dalgonaTo" style="border-color:#FFCA28;flex:1;min-width:120px;margin-bottom:0;" onchange="autoSave()"><option value="">-- 친구 선택 --</option></select>
       </div>
       <div class="dalgona-inner">
         <div class="dalgona-left">
           <div class="nom-label" style="font-size:22px;color:#E65100;">📝 편지</div>
-          <textarea class="form-textarea" id="dalgonaMsg" placeholder="친구에게 전하고 싶은 말을 써주세요..." rows="10" style="flex:1;" oninput="countChars(this);autoSave()"></textarea>
+          <textarea class="form-textarea" id="dalgonaMsg" placeholder="친구에게 전하고 싶은 말을 써주세요..." style="height:420px;box-sizing:border-box;" oninput="countChars(this);autoSave()"></textarea>
           <div class="char-counter" id="cc_dalgonaMsg">0 / 300</div>
         </div>
         <div class="dalgona-right">
@@ -555,7 +564,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
               <button class="tool-btn canvas-clear-btn" onclick="clearCanvas()">🗑</button>
               <button class="tool-btn" id="fullscreenBtn" onclick="toggleCanvasFullscreen()" title="전체화면" style="margin-left:auto;">+</button>
             </div>
-            <canvas id="dalgonaCanvas" width="1040" height="780" style="width:100%;height:auto;display:block;background:white;touch-action:none;-webkit-user-select:none;user-select:none;"></canvas>
+            <canvas id="dalgonaCanvas" width="1040" height="780" style="width:100%;flex:1;min-height:0;display:block;background:white;touch-action:none;-webkit-user-select:none;user-select:none;"></canvas>
           </div>
         </div>
       </div>
@@ -571,7 +580,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
     </div>
 
     <div class="submit-area">
-      <button class="btn-save" id="saveDraftBtn" onclick="saveRecord('draft')">💾 임시저장</button>
+      <!-- 임시저장 버튼 없음: 쓰는 즉시 이 태블릿에 자동 저장되고, 서버로는 제출할 때만 간다. -->
       <button class="btn-submit" id="submitBtn" onclick="submitRecord()">📮 제출하기</button>
     </div>
     </div><!-- /personalFormArea -->
@@ -599,34 +608,35 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
       </div>
 
       <div class="teacher-section">
-        <h3>📝 좋아해</h3>
+        <h3>📝 좋아바</h3>
         <div class="gab-grid">
           <div class="gab-card good">
-            <div class="gab-head"><span class="gab-badge">좋</span> 좋았던 점 / 감사 나누기</div>
+            <div class="gab-head"><span class="gab-badge">좋</span> 좋았던 점이나 감사 나누기</div>
             <textarea class="form-textarea" id="clsGood" placeholder="이번 달 우리 반에서 좋았던 점, 고마웠던 일은?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
             <div class="char-counter" id="cc_clsGood">0자</div>
           </div>
           <div class="gab-card bad">
-            <div class="gab-head"><span class="gab-badge">아</span> 아쉬웠던 점</div>
-            <textarea class="form-textarea" id="clsBad" placeholder="이번 달 우리 반에서 아쉬웠던 점은?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
+            <div class="gab-head"><span class="gab-badge">아</span> 아쉬웠던 점과 해결방안</div>
+            <textarea class="form-textarea" id="clsBad" placeholder="이번 달 우리 반에서 아쉬웠던 점과 해결방안은?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
             <div class="char-counter" id="cc_clsBad">0자</div>
           </div>
           <div class="gab-card wish">
-            <div class="gab-head"><span class="gab-badge">해</span> 해결방안</div>
-            <textarea class="form-textarea" id="clsWish" placeholder="아쉬웠던 점을 어떻게 해결하면 좋을까요?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
+            <div class="gab-head"><span class="gab-badge">바</span> 바라는 점이나 건의사항</div>
+            <textarea class="form-textarea" id="clsWish" placeholder="다음 학급회의에서 바라는 점이나 건의사항이 있다면?" rows="6" oninput="countChars(this);clsAutoSave()"></textarea>
             <div class="char-counter" id="cc_clsWish">0자</div>
           </div>
         </div>
       </div>
 
       <div class="submit-area">
-        <button class="btn-save" id="clsSaveBtn" onclick="clsSaveRecord('draft')">💾 임시저장</button>
+        <!-- 임시저장 버튼 없음(개인 기록과 같은 규칙) -->
         <button class="btn-submit" id="clsSubmitBtn" onclick="clsSubmitRecord()">📮 제출하기</button>
       </div>
     </div>
 
     <!-- 쿠키 별점·이유 입력창 -->
-    <div id="pickModal" class="pick-modal hidden" onclick="if(event.target===this)closePickModal()">
+    <!-- 창밖 클릭으로 닫지 않는다 — 쓰던 이유가 통째로 날아간다(닫기 버튼으로만 닫는다) -->
+    <div id="pickModal" class="pick-modal hidden">
       <div class="pick-box">
         <div class="pick-cookie">🍪</div>
         <div class="pick-title" id="pickTitle"></div>
@@ -635,7 +645,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <div class="pick-stars" id="pickStars"></div>
         <div class="pick-starword" id="pickStarWord">별을 눌러 주세요</div>
         <div class="pick-label">왜 그렇게 생각했나요?</div>
-        <textarea id="pickReason" class="pick-textarea" rows="4" placeholder="이유를 써 주세요" oninput="_pickCount()"></textarea>
+        <textarea id="pickReason" class="pick-textarea" rows="4" placeholder="이유를 써 주세요" oninput="_pickCount();_savePickDraft()"></textarea>
         <div class="char-counter" id="cc_pickReason" style="text-align:right;">0자</div>
         <div class="pick-btns">
           <button class="pick-btn ghost" id="pickRemoveBtn" onclick="removePickFromModal()">🗑 선택 취소</button>
@@ -669,6 +679,7 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
     <button class="t-tab active" onclick="teacherTab('overview',this)">📖 생활기록부</button>
     <button class="t-tab" onclick="teacherTab('ranking',this)">🏆 랭킹</button>
     <button class="t-tab" onclick="teacherTab('classrec',this)">🏛️ 학급회의</button>
+    <button class="t-tab" onclick="teacherTab('clsresult',this)">📊 회의 결과</button>
     <button class="t-tab" onclick="teacherTab('buzzer',this)">🔔 부저</button>
     <button class="t-tab" onclick="teacherTab('settings',this)">⚙️ 설정</button>
   </div>
@@ -724,8 +735,19 @@ body{font-family:'Jua',sans-serif;background:#FFF9F0;color:#4a3728;min-height:10
         <h4 style="margin:0;">학생별 제출 현황</h4>
         <button class="pink-btn" onclick="loadClassOverview(true)" style="margin-left:auto;">새로고침</button>
         <button class="pink-btn" onclick="exportClassPdf()">⬇️ 다운로드</button>
+        <button class="pink-btn soft" onclick="exportClassCsv()">📄 CSV</button>
       </div>
       <div id="classOverviewWrap">로딩 중...</div>
+    </div>
+  </div>
+
+  <!-- 탭: 학급회의 결과 (학급회의 탭과 같은 데이터·같은 회의 선택을 공유) -->
+  <div id="tab-clsresult" class="t-content hidden">
+    <div class="t-card">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+        <select id="tCmSelR" onchange="document.getElementById('tCmSel').value=this.value;loadClassOverview(true)" style="padding:7px 12px;border:2px solid #FFD6E0;border-radius:10px;font-family:'Jua';font-size:15px;background:white;outline:none;"></select>
+      </div>
+      <div id="clsResultWrap">로딩 중...</div>
     </div>
   </div>
 
@@ -957,7 +979,20 @@ async function _cloudinaryDestroy(publicId){
     return !!(j&&(j.ok||j.result==='ok'));
   }catch(e){ console.warn('[destroy] 실패(무시)', e); return false; }
 }
-function _sanitizePublicId(id){ return String(id).replace(/[^A-Za-z0-9_\-]/g,'_').slice(0,120); }
+/* ⚠️ 예전엔 허용문자 외를 전부 '_' 로 바꾸기만 했다 → **단사(injective)가 아니다.**
+   Cloudinary public_id 는 `saeng_student_{cd}_{월}` 이고 월 이름은 보통 한글이라,
+   길이·ASCII 위치가 같은 두 이름("가을"/"겨울", "봄"/"밤", "1학기"/"1반기")이 같은 id 가 된다.
+   같은 id 로 올리면 **덮어쓰기**이므로, 한 학생의 앞 달 그림이 뒷 달 그림으로 사라졌다
+   (RTDB drawings 노드는 키가 달라 따로 남지만, 둘 다 같은 URL 을 가리키게 된다).
+   .slice(120) 절단도 긴 이름끼리 같은 앞부분을 만들어 같은 문제를 낸다.
+   → 읽기 쉬운 앞부분은 그대로 두되 **원본 전체의 해시**를 붙인다(길이도 안전해진다).
+   ⚠️ 이 함수를 바꾸면 이후 업로드는 새 id 로 간다. 이미 올라간 그림은 RTDB 에 URL 이
+   통째로 저장돼 있어 계속 보이고, 다시 저장할 때 새 id 로 올라가면서 옛 파일만 남는다(무해). */
+function _hash32(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h.toString(36); }
+function _sanitizePublicId(id){
+  const raw=String(id);
+  return raw.replace(/[^A-Za-z0-9_\-]/g,'_').slice(0,100)+'_'+_hash32(raw);
+}
 async function uploadToCloudinary(dataUrl, publicId, opts){
   if(!dataUrl) return '';
   const fd=new FormData();
@@ -1067,6 +1102,48 @@ if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
 const fdb=firebase.database();
 const shopRef=fdb.ref('ClassData/EventShop');
 const saengRef=fdb.ref('ClassData/Saengwal');
+/* RTDB 연결 상태.
+   ⚠️ **오프라인 쓰기는 로컬 캐시에 즉시 반영되고 value 리스너까지 깨운다(local echo).**
+   그래서 "리스너가 값을 줬다 = 서버를 봤다"가 **아니다**. 캐시가 비어 있던 기기라면 그 값은
+   방금 내가 쓴 조각 하나뿐인데, 그걸 서버 화해로 오인하면 이후 쓰기가 "온전한 스냅샷"으로
+   승격돼 재연결 시 서버의 진짜 기록을 통째로 덮는다.
+   → 서버 화해 판정(_serverReconciled / _clsServerLoaded)은 반드시 이 플래그와 함께 본다.
+   `.info/connected`는 로컬 전용 노드라 트래픽 0이다. */
+let _fbOnline=false;
+/* 서버 시각 기준.
+   ⚠️ **여러 기기가 공유하는 시각(마감·순서·만료)에 Date.now()를 쓰면 안 된다.** 교실 태블릿·PC는
+   시계가 몇 분씩 어긋나 있어서, 한쪽이 쓴 시각을 다른 쪽이 자기 시계로 해석하면 그대로 틀어진다.
+   실제로 이 앱에서 세 군데가 이 함정이었다 — 부저 등수(느린 태블릿이 항상 1등),
+   타이머 카운트다운(시계 빠른 태블릿은 시작하자마자 00:00), 발송 락 3분 만료(시계 빠른 기기가
+   살아 있는 락을 훔쳐 **이중 지급**).
+   `.info/serverTimeOffset`은 로컬 전용 노드라 트래픽 0이고, 연결 시 SDK가 채워 준다.
+   아직 못 받았으면 0 = 지금까지의 동작(더 나빠지지 않는다). */
+let _svOffset=0;
+fdb.ref('.info/serverTimeOffset').on('value',s=>{ const v=Number(s.val()); if(isFinite(v)) _svOffset=v; });
+const _svNow=()=>Date.now()+_svOffset;
+/* 로컬 draft 의 시각. draft 의 유일한 임무는 "**내가 받아 온 서버 기록보다 새롭다**" 를 말하는 것이다.
+   서버 시각(_svNow)만 쓰면 전환기에 진다 — 이미 저장돼 있는 옛 기록은 기기 시계로 찍혀 있어서,
+   시계가 서버보다 **빠른** 태블릿에서는 그 옛 값이 지금 시각보다 커 보인다. 그러면 방금 친 글이
+   담긴 draft 가 옛 서버 기록에 져서, 새로고침 한 번에 화면이 옛 내용으로 되돌아간다.
+   받아 본 서버 값보다 항상 1 크게 잡아 그 역전을 없앤다(내용 보호는 full 플래그가 따로 한다). */
+const _draftStamp=srv=>Math.max(_svNow(), (Number(srv)||0)+1);
+/* 학생이 이번 배달분을 확인했는가.
+   ⚠️ student_viewed_at 은 **이벤트 상점(학생 기기)** 이 Date.now() 로 찍고,
+   record_delivered_at 은 여기(교사)가 서버 시각으로 찍는다 — 서로 다른 시계다.
+   학생 태블릿이 서버보다 느리면 확인을 눌러도 seen<delivered 가 되어 영영 '미확인'으로 남는다
+   (이 학교 태블릿에서 관측된 스큐 방향이 바로 '느림'이다).
+   배달 쓰기가 student_viewed_at 을 0 으로 되돌리는 **유일한 지점**이므로
+   "0보다 큰가"가 1차 근거이고, 시각 비교는 아주 오래된 값만 걸러 내는 2차 방어로 유예를 둔다. */
+const _VIEW_SKEW=24*60*60*1000;
+function _viewConfirmed(r){
+  const seen=Number(r&&r.student_viewed_at)||0;
+  const dlv=Number(r&&r.record_delivered_at)||0;
+  return seen>0 && seen>=dlv-_VIEW_SKEW;
+}
+fdb.ref('.info/connected').on('value',s=>{
+  const was=_fbOnline; _fbOnline=!!s.val();
+  if(!was&&_fbOnline){ try{ _clsResyncOnReconnect(); }catch(e){} }
+});
 
 // ═══ 상태 ═══
 let shopData=null,me=null,isTeacher=false;
@@ -1089,8 +1166,11 @@ let _serverReconciled=false;
 // 학생이 선물을 직접 골랐는지. 기본값 '마음'과 학생 선택 '마음'을 구분할 방법이 이것뿐이다.
 let _giftUserPicked=false;
 let _myRecordListener=null,_myRecordRef=null;
+// 이 월/학생 맥락에서 **실제로 받아 본** 서버 기록의 updated_at(로컬 draft 가 이겨야 하는 값)
+let _lastSrvTs=0;
 let _overviewListener=null,_overviewMonth=null;
 let _rejectionConfirmed=false;
+let _rejConfirmMark='';
 
 // ═══ 능력 목록 & 뜻 ═══
 const ABILITIES=['감사','경청','공감','끈기','너그러움','도전','배려','봉사','열정','예의','용기','용서','우정','자율','정돈','정직','존중','질서','창의성','책임','친절','협동'];
@@ -1127,7 +1207,7 @@ async function toggleMonthStatus(selId='tMonthSel5'){
     await saengRef.child('month_status/'+month).set({
       month:month,
       status:'closed',
-      closed_at:Date.now(),
+      closed_at:_svNow(),
       closed_by:'teacher'
     });
     alert('✅ '+month+' 월을 마감했습니다.');
@@ -1149,10 +1229,10 @@ async function openMonth(selId='tMonthSel5'){
     const updates={};
     Object.keys(all).forEach(m=>{
       if(m!==month && all[m]?.status==='active'){
-        updates[m]={month:m,status:'closed',closed_at:Date.now(),closed_by:'auto'};
+        updates[m]={month:m,status:'closed',closed_at:_svNow(),closed_by:'auto'};
       }
     });
-    updates[month]={month:month,status:'active',opened_at:Date.now()};
+    updates[month]={month:month,status:'active',opened_at:_svNow()};
     await saengRef.child('month_status').update(updates);
     alert('✅ '+month+' 활성화 완료. 다른 월은 자동 마감되었습니다.');
     loadOverview();
@@ -1220,12 +1300,12 @@ function buildStudentMonthTabs(){
   };
   const html=[];
   months.forEach(([val,label])=>{
-    html.push(btn(recordMode==='personal'&&val===currentMonth,'📖 '+_clsEsc(label),
+    html.push(btn(recordMode==='personal'&&val===currentMonth,_clsEsc(label),
       `switchStudentMonth('${val.replace(/'/g,"\\'")}')`));
   });
   if(months.length&&meets.length) html.push('<span style="color:rgba(255,255,255,.55);font-size:18px;align-self:center;">|</span>');
   meets.forEach(([id,label])=>{
-    html.push(btn(recordMode==='class'&&id===cmCurrent,'🏛️ '+_clsEsc(label)+(_cmIsActive(id)?'':' 🔒'),
+    html.push(btn(recordMode==='class'&&id===cmCurrent,_clsEsc(label)+(_cmIsActive(id)?'':' 🔒'),
       `switchMeeting('${id.replace(/'/g,"\\'")}')`));
   });
   wrap.innerHTML=html.join('');
@@ -1234,11 +1314,12 @@ function buildStudentMonthTabs(){
    예전엔 로그인 때 목록을 한 번만 읽어서, 선생님이 월/회의를 숨기거나 열어도
    학생이 새로고침해야 보였다. 폴링 대신 작은 노드 몇 개에 리스너를 건다(트래픽 거의 0). */
 let _visRefs=[];
+let _visSeen=new Set();   // 어떤 노드가 실제로 도착했는지 — 아직 안 온 노드로 판단하지 않기 위해
 function listenVisibility(){
   detachVisibilityListeners();
   const bind=(path,apply)=>{
     const ref=saengRef.child(path);
-    const cb=ref.on('value',s=>{ apply(s.val()||{}); _onVisibilityChanged(); });
+    const cb=ref.on('value',s=>{ apply(s.val()||{}); _visSeen.add(path); _onVisibilityChanged(); });
     _visRefs.push([ref,cb]);
   };
   bind('months',      v=>{_monthsCache=v;});
@@ -1251,7 +1332,7 @@ function listenVisibility(){
 }
 function detachVisibilityListeners(){
   _visRefs.forEach(([r,c])=>{try{r.off('value',c);}catch(e){}});
-  _visRefs=[];
+  _visRefs=[]; _visSeen=new Set();
 }
 function _onVisibilityChanged(){
   if(!me||isTeacher) return;
@@ -1264,21 +1345,37 @@ function _onVisibilityChanged(){
   }
   if(recordMode==='class'&&cmCurrent&&!visC.includes(cmCurrent)){
     if(visC.length){ switchMeeting(_cmDefaultPick()); return; }
-    _clsFlush();
     if(visM.length){ switchStudentMonth(visM[0]); return; }
   }
-  // 아직 아무 회의도 안 고른 상태면 기본 선택 규칙을 따른다(부팅 순서에 따라 옛 회의가 잡히지 않도록)
-  if(!cmCurrent&&visC.length) cmCurrent=_cmDefaultPick();
+  // 아직 아무 회의도 안 고른 상태면 기본 선택 규칙을 따른다(부팅 순서에 따라 옛 회의가 잡히지 않도록).
+  //   ⚠️ cm_hidden/cm_status가 도착하기 전에 고르면 _cmHidden이 아직 {}라 **숨긴 회의**를 집는다
+  //   (리스너 7개는 각각 따로 도착한다 — cm_list가 먼저 오는 경우가 있다).
+  if(!cmCurrent&&visC.length&&_visSeen.has('cm_hidden')&&_visSeen.has('cm_status')) cmCurrent=_cmDefaultPick();
   buildCmTabs();               // 탭 줄 + 회의 폼 표시까지 함께 갱신
   setRecordMode(recordMode);   // 회의 제목이 바뀌면 화면 제목도 따라가게(표시만 갱신)
   _clsSyncLock();
 }
 // 마감/재개는 폼을 다시 채우지 않고 잠금만 바꾼다(작성 중 글을 서버 값으로 덮지 않도록)
 function _clsSyncLock(){
-  if(recordMode!=='class'||!cmCurrent) return;
+  if(!cmCurrent) return;
   const closed=!_cmIsActive(cmCurrent);
-  if(closed) _clsFlush();
-  clsSetLocked(closed||_clsMyApproved);
+  // 마감되면 💾/제출이 잠긴다 → 미저장 글을 지금 한 번 밀어내지 않으면 영영 못 보낸다.
+  //   ⚠️ recordMode 가드보다 **앞**이어야 한다 — 개인 기록 탭을 보는 동안 마감되면
+  //   밀어내기가 아예 안 돌고, 돌아와도 잠긴 폼만 보게 된다(폼 DOM 은 그대로 살아 있다).
+  if(recordMode!=='class') return;
+  // ⚠️ 잠그는 건 언제나, 푸는 건 서버 기록을 반영한 뒤에만.
+  //   _clsMyApproved는 clsLoadMyRecord의 await "뒤"에서야 갱신된다(이전 회의 값이 남아 있다).
+  //   로딩 중에 선생님이 회의를 열거나 이름/순서를 바꾸면 cm_* 리스너가 여기까지 흘러들어와,
+  //   그 낡은 false를 믿고 **아직 비어 있는 폼**을 편집 가능하게 열어 버렸다 →
+  //   학생이 한 글자 치면 clsAutoSave의 빈 스냅샷이 서버 기록을 덮는다.
+  // 2026-09-05 정책 변경: 제출 상태도 잠금 대상(교사 반려 전까지 수정 불가) — 개인 생활기록부와 동일.
+  if(closed||_clsMyApproved||_clsMyStatus==='submitted') clsSetLocked(true);
+  else if(_clsServerLoaded) clsSetLocked(false);
+  // 온라인인데도 화해가 안 됐으면 여기서 자가복구한다. _clsResyncOnReconnect는 연결 false→true
+  //   **전환**에서만 불리는데, 첫 로드에서 `.info/connected` 콜백이 데이터 콜백보다 늦게 큐잉되면
+  //   전환을 놓쳐 플래그가 세션 내내 false로 고착된다(→ 선생님이 마감→재개해도 이 학생만 읽기전용).
+  //   _clsSyncLock은 바로 그 마감/재개 때 불리는 함수라 자가복구 지점으로 정확하다.
+  else if(_fbOnline) _clsResyncOnReconnect();
   // 보고 있는 도중 선생님이 마감하면 예쁜 창으로 알린다(회의당 한 번)
   if(closed&&!_clsClosedSeen.has(cmCurrent)){
     _clsClosedSeen.add(cmCurrent);
@@ -1289,8 +1386,9 @@ function _clsSyncLock(){
 }
 async function switchStudentMonth(val){
   if(val===currentMonth&&recordMode==='personal') return;
-  if(recordMode!=='personal'){ _clsFlush(); recordMode='personal'; }
+  if(recordMode!=='personal'){ recordMode='personal'; }
   if(val===currentMonth){ setRecordMode('personal'); buildStudentMonthTabs(); return; }
+  _closeAllNoticeModals();   // 다른 월로 옮기면서 이전 월 알림창을 화면에 남기지 않는다
   // 캔버스 백업을 "이전 월 키로" 확정 저장한 뒤 월을 바꾼다.
   //   _writeCanvasDraft는 발화 시점의 currentMonth를 읽으므로, 700ms 디바운스 안에 월을 바꾸면
   //   resetForm으로 비워진 캔버스가 "새 월 키"로 저장돼(=빈 그림 판정) 새 월의 백업까지 지워졌다.
@@ -1329,7 +1427,7 @@ async function loadMonthsFromFirebase(){
   const missing=[];
   mSnap.forEach(c=>{if(!_monthsOrder[c.key]) missing.push(c.key);});
   if(missing.length){
-    const base=Date.now()-missing.length*1000;
+    const base=_svNow()-missing.length*1000;
     const updates={};
     missing.forEach((k,i)=>{const t=base+i*1000;updates[k]=t;_monthsOrder[k]=t;});
     await saengRef.child('months_order').update(updates);
@@ -1364,17 +1462,10 @@ async function renameMonth(val){
 async function confirmDeleteMonth(val){
   const label=_monthsCache[val]||val;
   if(!confirm(`'${label}'을(를) 목록에서 삭제할까요?\n해당 월의 기록/추천/달고나 데이터도 모두 삭제됩니다.`)) return;
-  await Promise.all([
-    saengRef.child('records/'+val).remove(),
-  ]);
-  const [nomSnap,dalSnap]=await Promise.all([
-    saengRef.child('nominations').once('value'),
-    saengRef.child('dalgona').once('value')
-  ]);
-  const delN=[],delD=[];
-  nomSnap.forEach(c=>{const v=c.val();if(v&&(v.month===val||(c.key&&c.key.startsWith(val+'_')))) delN.push(saengRef.child('nominations/'+c.key).remove());});
-  dalSnap.forEach(c=>{const v=c.val();if(v&&(v.month===val||(c.key&&c.key.startsWith(val+'_')))) delD.push(saengRef.child('dalgona/'+c.key).remove());});
-  await Promise.all([...delN,...delD]);
+  // ⚠️ 여기서 records/nominations/dalgona 를 직접 지우지 않는다 —
+  //   바로 아래 removeMonthFromFirebase → _purgeMonthData 가 **같은 일을 이미** 한다.
+  //   예전엔 그 앞에 사본이 하나 더 있었고, 그 사본만 최장 일치를 안 거쳐서
+  //   "6" 을 지울 때 "6_월" 의 추천·달고나까지 지웠다(게다가 두 노드를 통째로 읽었다).
   await removeMonthFromFirebase(val);
   delete _hiddenCache[val];
   await saengRef.child('months_hidden/'+val).remove();
@@ -1430,7 +1521,7 @@ async function onMonthDrop(e,targetVal){
   if(from<0||to<0) return;
   entries.splice(from,1);
   entries.splice(to,0,_dragMonth);
-  const base=Date.now()-entries.length*1000;
+  const base=_svNow()-entries.length*1000;
   const updates={};
   entries.forEach((k,i)=>{const t=base+i*1000;updates[k]=t;_monthsOrder[k]=t;});
   await saengRef.child('months_order').update(updates);
@@ -1443,20 +1534,32 @@ async function bulkApproveMonth(month){
   const recSnap=await saengRef.child('records/'+month).once('value');
   const recs=recSnap.val()||{};
   let cnt=0, skipped=0;
+  const failed=[];   // 학생마다 최대 3번 await하는 순차 처리라, 교실 AP가 중간에 끊기면
+                      //   한 명에서 멈추고 나머지는 조용히 미처리로 남을 수 있었다 — 실패만 모아 뒤에 명시적으로 알린다.
   for(const cd of Object.keys(recs)){
     const r=recs[cd];
     if(!r){skipped++;continue;}
     if(r.status==='approved'){skipped++;continue;}
-    // 1) records 승인
-    await saengRef.child('records/'+month+'/'+cd).update({status:'approved',rejected_reason:''});
-    // 2) draft 학생 대비: records 데이터로 nomination/dalgona 없으면 생성
-    await ensureNominationsAndDalgonaForRecord(cd,month,r);
-    // 3) pending 항목 일괄 승인
-    await autoApproveRelated(cd,month);
-    cnt++;
+    // 반려된 기록은 건너뛴다 — 아니면 일괄승인이 교사가 방금 반려한 내용을 조용히 승인해버린다.
+    if(r.status==='rejected'){skipped++;continue;}
+    try{
+      // 1) records 승인
+      await saengRef.child('records/'+month+'/'+cd).update({status:'approved',rejected_reason:''});
+      // 2) draft 학생 대비: records 데이터로 nomination/dalgona 없으면 생성
+      await ensureNominationsAndDalgonaForRecord(cd,month,r);
+      // 3) pending 항목 일괄 승인
+      await autoApproveRelated(cd,month);
+      cnt++;
+    }catch(e){
+      console.error('[bulkApproveMonth] 실패',cd,e);
+      failed.push(getStudentName(cd)||cd);
+    }
   }
-  if(cnt===0){
+  if(cnt===0&&!failed.length){
     alert(`승인할 기록이 없습니다.\n(이미 승인된 ${skipped}건)`);
+  }else if(failed.length){
+    alert(`⚠️ ${cnt}명 승인 완료, ${failed.length}명 실패했어요.\n실패: ${failed.join(', ')}\n\n인터넷 연결을 확인하고 다시 눌러주세요(이미 승인된 학생은 건너뛰어집니다).`);
+    loadOverview();
   }else{
     toast(`✅ ${cnt}명 일괄 승인 완료${skipped?` (이미 승인 ${skipped}건 건너뜀)`:''}`);
     loadOverview();
@@ -1545,11 +1648,11 @@ async function clickMonthToggleFor(month){
   const snap=await saengRef.child('month_status/'+month).once('value');
   const status=snap.val()?.status;
   if(status==='active'){
-    await saengRef.child('month_status/'+month).set({month,status:'closed',closed_at:Date.now(),closed_by:'teacher'});
+    await saengRef.child('month_status/'+month).set({month,status:'closed',closed_at:_svNow(),closed_by:'teacher'});
     toast('📋 '+( _monthsCache[month]||month)+' 마감·발송');
     await openDeliveryModalFor(month);
   }else{
-    await saengRef.child('month_status/'+month).set({month,status:'active',opened_at:Date.now()});
+    await saengRef.child('month_status/'+month).set({month,status:'active',opened_at:_svNow()});
     toast('✅ '+( _monthsCache[month]||month)+' 진행');
   }
   renderMonthManageList();
@@ -1585,17 +1688,32 @@ async function saveMonthToFirebase(val,label){
   saengRef.child('settings/monthsInit').set(true).catch(()=>{});   // 자동 생성은 최초 1회뿐
   _monthsCache[val]=label;
   if(!_monthsOrder[val]){
-    const now=Date.now();
+    const now=_svNow();   // 월 정렬에 쓰이는 저장값(기기 간 비교)
     await saengRef.child('months_order/'+val).set(now);
     _monthsOrder[val]=now;
   }
 }
-async function removeMonthFromFirebase(val){
-  // 메타 + 해당 월에 속한 모든 학생 데이터 (records, nominations, dalgona, drawings) 제거
-  await saengRef.child('months/'+val).remove();
-  await saengRef.child('month_status/'+val).remove();
-  await saengRef.child('months_order/'+val).remove();
-  await saengRef.child('months_hidden/'+val).remove();
+/* 한 달치 학생 데이터 정리(메타 제외) — 월 삭제와 '같은 이름으로 재생성' 두 곳이 함께 쓴다.
+   예전엔 같은 60줄이 두 벌로 존재해, 한쪽만 고치면 조용히 갈라지는 구조였다. */
+/* 월 키끼리 접두사·접미사 관계가 될 수 있다. 월 키는 라벨의 . # $ / [ ] 를 '_' 로 바꾼 값이라
+   "6" 과 "6_월"(라벨 "6.월")이 함께 존재할 수 있고, 그러면 `k.startsWith('6'+'_')` 가
+   **"6_월"의 데이터까지 집는다** → 짧은 달을 지울 때 긴 달의 추천·달고나·그림·가방 이벤트가
+   조용히 함께 삭제된다. 알려진 월 목록에서 **최장 일치**로 고르면 모호성이 사라진다.
+   ⚠️ 월 목록을 아직 못 받았으면(빈 캐시) 예전과 똑같이 동작한다 — 안전한 쪽으로 degrade. */
+const _monthKeys=()=>Object.keys(_monthsCache||{});
+/* 추천·달고나 한 건이 이 달의 것인가. month 필드가 있으면 그것만 믿고(정확),
+   없는 옛 기록만 키로 판단하되 최장 일치로 본다. **정리·조회·발송이 같은 규칙을 써야 한다** —
+   한쪽만 고치면 "지울 땐 남았는데 발송엔 섞이는" 식으로 갈라진다. */
+function _isMonthRec(key,v,month){
+  const mv=v&&v.month;
+  return (mv!=null&&mv!=='') ? mv===month : _keyBelongsToMonth(key,month,'prefix');
+}
+function _keyBelongsToMonth(k,val,mode){
+  const hit=m=> mode==='suffix' ? k.endsWith('_'+m) : k.startsWith(m+'_');
+  if(!k||!hit(val)) return false;
+  return !_monthKeys().some(m=>m!==val && m.length>val.length && hit(m));
+}
+async function _purgeMonthData(val){
   await saengRef.child('records/'+val).remove();
   // nominations/dalgona: key가 "{month}_{cd}_..." 또는 데이터에 month 필드를 가짐
   try{
@@ -1603,7 +1721,7 @@ async function removeMonthFromFirebase(val){
     const nomVal=nomSnap.val()||{};
     const nomDeletes=[];
     for(const [k,v] of Object.entries(nomVal)){
-      if(k.startsWith(val+'_') || (v&&v.month===val)) nomDeletes.push(saengRef.child('nominations/'+k).remove());
+      if(_isMonthRec(k,v,val)) nomDeletes.push(saengRef.child('nominations/'+k).remove());
     }
     await Promise.all(nomDeletes);
   }catch(e){}
@@ -1612,7 +1730,7 @@ async function removeMonthFromFirebase(val){
     const dalVal=dalSnap.val()||{};
     const dalDeletes=[];
     for(const [k,v] of Object.entries(dalVal)){
-      if(k.startsWith(val+'_') || (v&&v.month===val)) dalDeletes.push(saengRef.child('dalgona/'+k).remove());
+      if(_isMonthRec(k,v,val)) dalDeletes.push(saengRef.child('dalgona/'+k).remove());
     }
     await Promise.all(dalDeletes);
   }catch(e){}
@@ -1622,7 +1740,8 @@ async function removeMonthFromFirebase(val){
     const drVal=drSnap.val()||{};
     const drDeletes=[];
     for(const k of Object.keys(drVal)){
-      if(k.endsWith('_'+val)) drDeletes.push(firebase.database().ref('ClassData/EventShop/drawings/'+k).remove());
+      // drawings 키는 student_{cd}_{month} — 접미사 쪽 최장 일치.
+      if(_keyBelongsToMonth(k,val,'suffix')) drDeletes.push(firebase.database().ref('ClassData/EventShop/drawings/'+k).remove());
     }
     await Promise.all(drDeletes);
   }catch(e){}
@@ -1644,7 +1763,7 @@ async function removeMonthFromFirebase(val){
         if(!it||!Array.isArray(it.events)) return it;
         const filtered=it.events.filter(ev=>{
           const k=ev&&(ev.nomKey||ev.dalKey)||'';
-          return !(k&&k.startsWith(val+'_'));
+          return !_keyBelongsToMonth(k,val,'prefix');   // 아래 트랜잭션(_filterMonthInv)과 같은 규칙이어야 한다
         });
         if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
         return it;
@@ -1655,10 +1774,18 @@ async function removeMonthFromFirebase(val){
         await shopRef.child('stu/'+key+'/inv').transaction(cur=>_filterMonthInv(cur,val));
         // 이벤트 상점의 증분 동기화가 inv 변경을 보도록 — 빠뜨리면 상점을 켜둔 학생이 옛 inv를
         //   계속 쓰다가 다음 쓰기에서 방금 정리한 events를 되살린다.
-        try{ await shopRef.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
+        try{ await shopRef.child('stu/'+key+'/updatedAt').set(_svNow()); }catch(e){}
       }
     }
   }catch(e){console.warn('학생 가방 정리 실패',e);}
+}
+async function removeMonthFromFirebase(val){
+  // 메타 + 해당 월에 속한 모든 학생 데이터 (records, nominations, dalgona, drawings) 제거
+  await saengRef.child('months/'+val).remove();
+  await saengRef.child('month_status/'+val).remove();
+  await saengRef.child('months_order/'+val).remove();
+  await saengRef.child('months_hidden/'+val).remove();
+  await _purgeMonthData(val);
   delete _monthsCache[val];
   delete _monthsOrder[val];
 }
@@ -1721,18 +1848,39 @@ function loginStudent(){
   if(!stu) return alert('일치하는 학생 코드가 없습니다.');
   me=stu; localStorage.setItem('sw_stuCode',code); showStudentApp();
 }
-function loginTeacher(){
-  const pw=document.getElementById('teacherCode').value;
-  if(pw==='csgo10'){isTeacher=true;localStorage.setItem('sw_teacher','1');showTeacherApp();}
-  else alert('비밀번호 오류');
+/* 교사 비밀번호는 **서버(워커 시크릿 TEACHER_PW)** 에서만 검증한다.
+   예전엔 여기서 비번 상수와 직접 비교해, 소스만 열면 그 값이 그대로 보였다
+   (동화책도 같은 문제가 있다 — 거기 TEACHER_PW 도 클라이언트 상수다).
+   ⚠️ 이건 **교사 화면 진입 차단**이지 DB 보호가 아니다. 이 앱은 Firebase 를 직접 쓰고
+     규칙이 열려 있어, 콘솔에서 SDK 로 접근하는 경로는 그대로다(별도 과제).
+   ⚠️ 최초 1회만 온라인이면 된다 — 이후에는 localStorage('sw_teacher') 로 자동 로그인한다.
+     그래서 워커가 잠깐 죽어도 이미 로그인한 교사 기기는 계속 쓸 수 있다.
+   ⚠️ 폴백(예: 오프라인이면 로컬 비교 허용)은 두지 않는다 — 그 폴백이 곧 우회로가 된다. */
+async function loginTeacher(){
+  const el=document.getElementById('teacherCode');
+  const btn=document.querySelector('#teacherLoginPanel button');
+  const pw=(el&&el.value)||'';
+  if(!pw) return alert('비밀번호를 입력하세요.');
+  const _prev=btn?btn.textContent:'';
+  if(btn){ btn.disabled=true; btn.textContent='확인 중…'; }
+  try{
+    const r=await _fetchT(API_URL,{method:'POST',body:JSON.stringify({action:'verifyTeacher',pw})},15000);
+    const j=await r.json().catch(()=>({}));
+    // ⚠️ 워커는 실패도 HTTP 200 + {ok:false} 로 준다 → throw 가 아니라 .ok 로 판정해야 한다.
+    if(!j||!j.ok){ alert((j&&j.error)||'비밀번호 오류'); return; }
+    isTeacher=true; localStorage.setItem('sw_teacher','1'); showTeacherApp();
+  }catch(e){
+    alert('⚠️ 서버에 연결하지 못했어요. 인터넷 확인 후 다시 시도해주세요.');
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent=_prev||'로그인'; }
+  }
 }
 function logout(){
-  _clsFlush(); // 우리 반 대기 저장 확정 (me가 살아있을 때)
   _flushCanvasSave();// 대기 중 캔버스 백업을 me가 살아있을 때 확정(_writeCanvasDraft는 me 없으면 early-return)
   detachMyRecordListener();
   detachOverviewListener();
   // 부저/타이머 리스너도 해제. 남겨두면 로그아웃 후에도 콜백이 돌며 me.cd를 참조해 TypeError.
-  saengRef.child('buzzer').off('value');
+  _buzzDetach();
   saengRef.child('timer').off('value');
   saengRef.child('force_reload').off('value'); // 무해하지만 재로그인 전까지 남는 구독 정리(재부착은 listenForceReload에서 off→on)
   detachVisibilityListeners();
@@ -1751,11 +1899,14 @@ function logout(){
   document.querySelectorAll('.gem-chip').forEach(el=>el.classList.remove('selected'));
   // 학급회의 폼 초기화 (다음 학생에게 이전 학생 글이 남지 않도록)
   clsBright=[];clsImprove=[];_clsCtx='';cmCurrent='';
-  _clsRejReason='';_clsMyApproved=false;_clsClosedSeen.clear();
+  _clsRejReason='';_clsMyApproved=false;_clsServerLoaded=false;_clsClosedSeen.clear();
+  _lastSrvTs=0; _clsLastSrvTs=0; _clsMyStatus='';   // 다음 학생에게 이전 학생 기준이 새지 않도록
   ['clsGood','clsBad','clsWish'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('pickModal')?.classList.add('hidden');
-  document.getElementById('clsNoticeModal')?.classList.add('hidden');
-  document.getElementById('clsRejectNoticeModal')?.classList.add('hidden');
+  /* ⚠️ rejectionNoticeModal(개인기록 반려 알림)도 함께 닫아야 한다 — 예전엔 여기서 빠져 있었다.
+     이 모달은 #studentApp 의 자식이 아니라 형제 요소라 studentApp 을 숨겨도 안 가려지고,
+     같은 태블릿을 쓰는 다음 학생의 로그인 화면 위에 그대로 남을 수 있었다. */
+  _closeAllNoticeModals();
   // 캔버스 초기화
   if(canvas&&ctx){ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);}
   // 배너 숨김
@@ -1785,8 +1936,25 @@ async function showStudentApp(){
   buildStudentSelects();
   // 학급회의: 쿠키 그리드 + 회의 탭 (실패해도 기본 목록으로 뜬다)
   loadCookieList().then(buildCookieGrids).catch(()=>buildCookieGrids());
-  initStudentMeetings().catch(()=>{});
+  /* ⚠️ 마지막 탭 기억을 **여기서 먼저 읽어 둔다.** 바로 아래 setRecordMode('personal')이
+     _saveLastTab()을 호출해 저장된 값을 'personal'로 즉시 덮어써 버린다 — 그 뒤에 읽으면
+     학급회의였다는 사실 자체가 사라져 있어 복원이 절대 발동하지 않는다(실제로 이렇게 죽어 있었다). */
+  const _lastTab=_readLastTab();
   setRecordMode('personal');
+  /* 마지막으로 보던 탭으로 되돌린다. 회의 목록을 받은 **뒤에** 판단해야 한다 —
+     숨겨지거나 지워진 회의로 보내면 빈 화면이 된다. 못 찾으면 개인 기록에 그대로 둔다. */
+  initStudentMeetings().then(()=>{
+    const last=_lastTab;
+    if(!last) return;
+    if(last.mode==='class'&&last.mid){
+      const ok=sortedMeetings().some(([id])=>id===last.mid&&!_cmHidden[id]);
+      if(ok){ switchMeeting(last.mid); return; }
+    }
+    if(last.mode==='personal'&&last.month&&last.month!==currentMonth){
+      const vis=sortedMonthEntries().some(([v])=>v===last.month&&!_hiddenCache[v]);
+      if(vis) switchStudentMonth(last.month);
+    }
+  }).catch(()=>{});
   // 글자 수 제한 로드 후 기록 로드
   saengRef.child('settings/limits').once('value',snap=>{
     const d=snap.val();if(d) Object.assign(charLimits,d);
@@ -1800,6 +1968,16 @@ async function showStudentApp(){
 async function showTeacherApp(){
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('teacherApp').classList.remove('hidden');
+  // 🪞 명단이 비어 있으면 여기서 원본을 한 번 읽어 명단과 미러를 만든다.
+  //   ⚠️ 이게 없으면 '차단 화면 → 교사 로그인' 으로 들어온 교사는 명단도 미러도 없는 채로 시작한다
+  //   (그 세션은 부팅 때 교사 경로를 안 탔다) → 학생들은 계속 막힌 채로 남는다.
+  //   로그인은 풀렸는데 정작 목적(미러 생성)은 달성 못 하던 구멍이었다.
+  //   await 하지 않는다 — 화면을 먼저 띄우고, 다 읽으면 _applyRawStu 가 표를 다시 그린다.
+  //   명단이 이미 있으면(정상 부팅) 아무것도 하지 않는다 = 추가 읽기 0.
+  //   force 는 쓰지 않는다 — 학생이 **0명인 학급**은 정상적으로 명단이 비어 있어서,
+  //   force 로 읽으면 교사가 열 때마다 원본을 다시 받는다. TTL 이 그 반복을 막아 주고,
+  //   우리가 노리는 경우(차단됐던 교사)는 아직 전체를 한 번도 안 읽어 TTL 이 비어 있다.
+  try{ if(!shopData || !((shopData.stu)||[]).length) _ensureFullStu(); }catch(_){}
   initMonthSelectors();
   await loadMonthsFromFirebase();
   // 처음 쓰는 반에만 현재 월을 자동으로 하나 만들어 준다.
@@ -1959,6 +2137,19 @@ function buildStudentSelects(){
   });
 }
 
+// 방어자·유망주는 같은 친구 중복 선택 금지 — 제출할 때가 아니라 고르는 즉시 막는다.
+//   방금 바꾼 셀렉트를 되돌리고(다른 쪽은 건드리지 않음) 예쁜 안내창을 띄운다.
+function checkNomDuplicate(changedId){
+  const defSel=document.getElementById('defenderSelect');
+  const proSel=document.getElementById('promisingSelect');
+  if(!defSel||!proSel) return;
+  if(defSel.value && proSel.value && defSel.value===proSel.value){
+    const changed=document.getElementById(changedId);
+    if(changed) changed.value='';
+    showClsNotice('🙅','앗, 같은 친구예요!','방어자와 유망주는 서로 다른 친구를 골라주세요.',
+      'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
+  }
+}
 // ═══ 자동저장 (로컬+Firebase 디바운스) ═══
 let autoSaveTimer=null;
 let _draftBackupWarned=false; // 글 자동저장 쿼터초과 안내 1회 제한(매 입력마다 스팸 방지)
@@ -1987,9 +2178,11 @@ function autoSave(){
   //   draft는 제출 성공 시점(saveRecord 제출 경로의 removeItem)에 비우므로 애초에 쌓여 공간을 잠식하지 않는다.
   //   현재 월 저장이 실패하면 무음 유실 대신 1회 안내(그림 경로 _writeCanvasDraft와 대칭).
   const _dkey='sw_draft_'+me.cd+'_'+currentMonth;
-  try{ localStorage.setItem(_dkey,JSON.stringify({...draft,updated_at:Date.now(),full:_serverReconciled})); _draftBackupWarned=false; }
+  // ⚠️ 서버 기록의 updated_at 과 **직접 비교**되는 값이다(fillForm 병합 판정) → 서버 시각으로 찍는다.
+  //   기기 시계로 찍으면 태블릿을 옮긴 학생의 draft 가 서버에 지거나 이기는 판정이 뒤집힌다.
+  try{ localStorage.setItem(_dkey,JSON.stringify({...draft,updated_at:_draftStamp(_lastSrvTs),full:_serverReconciled})); _draftBackupWarned=false; }
   catch(e){
-    if(!_draftBackupWarned){ _draftBackupWarned=true; try{ toast('⚠️ 저장공간이 가득 차 글이 백업되지 않아요 — 지금 💾 임시저장 하세요'); }catch(_){} }
+    if(!_draftBackupWarned){ _draftBackupWarned=true; try{ toast('⚠️ 저장공간이 가득 차 글이 백업되지 않아요 — 저장 공간을 비워 주세요'); }catch(_){} }
   }
 }
 
@@ -2025,6 +2218,22 @@ function collectFormData(status){
 // 쓰고 → dTs>rTs 병합이 서버 기록 전체를 빈 값으로 덮어 지난 작성분이 영구 소실되던 사고를 막는다.
 // (fillForm의 _preserve/_put과 같은 "기본값이면 학생이 안 넣은 것" 규칙을 병합 단계에도 적용.
 //  status/rejected_reason은 언제나 서버 진실값을 유지한다.)
+/* 💾 임시저장이 **서버 기록을 아직 못 받은 상태**에서 눌렸을 때, 라이브 폼의 빈 칸이 서버를
+   덮지 않도록 기본값 필드를 뺀다. autoSave의 빈-스냅샷 문제는 _mergeDraftOverServer(full 플래그)가
+   막지만, 💾는 라이브 폼을 서버에 **직접** update하므로 그 병합을 통과하지 않는다 —
+   느린 교실 AP에서 리스너가 오기 전(빈 폼) 학생이 "글이 사라졌다"고 놀라 💾를 누르면
+   그 순간 서버의 진짜 기록이 통째로 비워졌다. 서버를 본 뒤(_serverReconciled)의 빈 칸은
+   의도적 삭제이므로 그대로 보낸다 — full 플래그와 정확히 같은 규칙이다. */
+function _stripUnreconciled(d){
+  const out={...d};
+  ['lack_reason','full_reason','growth_plan','my_secret','teacher_msg','defender_reason',
+   'promising_reason','dalgona_msg','dalgona_heart','dalgona_etc',
+   'defender_to','promising_to','dalgona_to'].forEach(k=>{ if(!out[k]) delete out[k]; });
+  if(!(out.lack_names&&out.lack_names.length)) delete out.lack_names;
+  if(!(out.full_names&&out.full_names.length)) delete out.full_names;
+  if(!out.dalgona_gift||out.dalgona_gift==='마음') delete out.dalgona_gift;
+  return out;
+}
 function _mergeDraftOverServer(d,draft){
   // draft.full===true → 서버 데이터로 폼이 채워진 뒤(또는 💾/제출로) 만들어진 "완전한" draft다.
   //   이 경우 빈 필드는 학생이 의도적으로 지운 것이므로 그대로 반영해 삭제를 보존한다(옛 통째 병합 동작).
@@ -2096,11 +2305,20 @@ async function isMonthActive(month){
 
 function listenMyRecord(){
   detachMyRecordListener();
+  // ⚠️ 월/학생이 바뀌면 "받아 본 서버 시각" 기준도 새로 잡아야 한다(_clsLastSrvTs 와 같은 규칙).
+  //   남겨 두면 이전 맥락의 큰 값이 이 맥락 draft 를 부풀려, 다른 기기의 최신 기록을 낡은 draft 가 이긴다.
+  _lastSrvTs=0;
   resetForm();
   // 기본값: 읽기 전용 (확인되기 전까지 잠금) — 비동기 확인 후 active면 해제
   _readonlyMode=true;
-  // 활성화된 월이 아니면 읽기 전용
-  saengRef.child('month_status/'+currentMonth).once('value').then(snap=>{
+  // 아래 month_status 확인은 records 리스너와 독립된 비동기라 순서가 뒤바뀔 수 있다.
+  //   records 리스너(.on('value'))가 먼저 도착해 fillForm으로 잠금/라벨을 이미 정확히 그렸으면,
+  //   그 뒤에 도착하는 이 캐시 기반 "잠금 해제"가 방금 반려된 기록을 덮어써 버튼을 도로 풀어버렸다
+  //   (라벨은 안 건드리니 "라벨은 예전 상태, 잠금만 풀린" 모순된 화면이 된다).
+  const _recToken={fired:false};
+  const _monthStatusCd=me.cd, _monthStatusMo=currentMonth;   // 신원 캡처(await 중 계정/월 전환 대비)
+  saengRef.child('month_status/'+currentMonth).once('value').then(async snap=>{
+    if(_recToken.fired) return; // records 리스너가 이미 진짜 상태를 그렸다 — 낡은 추측으로 덮지 않는다
     const status=snap.val()?.status;
     _readonlyMode=(status!=='active');
     const ro=document.getElementById('readonlyBanner');
@@ -2108,32 +2326,56 @@ function listenMyRecord(){
     if(_readonlyMode){
       setFormLocked(true);
       document.getElementById('submitBtn').disabled=true;
-      document.getElementById('saveDraftBtn').disabled=true;
+      { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=true; }
       formLocked=true;
     }else{
-      // 활성 월 확인: 서버 상태가 approved/미확인반려가 아닐 때만 잠금 해제
-      // (on('value') 캐시가 먼저 발화해 잠근 경우, approved/rejected는 유지)
+      // 활성 월 확인: 서버 상태가 approved/미확인반려가 아닐 때만 잠금 해제.
+      //   ⚠️ 예전엔 이 판정을 localStorage 캐시(sw_lastRecord_*)로 했는데, 그 캐시는 **이 기기에서
+      //   마지막으로 본 상태**일 뿐이다. 다른 사람이 방금 반려/승인했는데 아직 이 기기가 그걸
+      //   본 적이 없으면(교사가 학생 계정을 처음 열어보는 경우가 전형적) 캐시가 옛 'submitted'를
+      //   가리켜 방금 반려된 기록을 조용히 잠금해제해 버렸다 — records 리스너(.on('value'))가
+      //   나중에 와서 라벨은 바로잡아도, 그 사이 화면은 "라벨 틀림+잠금 풀림"으로 보이고
+      //   레이스에 따라 늦게 도착하면 계속 그 상태로 남을 수 있었다.
+      //   서버에서 직접 한 번 더 읽어 판정한다(캐시가 아니라 지금의 진짜 상태).
       let _lsStatus='';
-      try{const _r=localStorage.getItem('sw_lastRecord_'+me.cd+'_'+currentMonth);_lsStatus=(_r?JSON.parse(_r):null)?.status||'';}catch(e){}
-      const _keepLocked=_lsStatus==='approved'||(_lsStatus==='rejected'&&!_rejectionConfirmed);
+      try{
+        const _r=await _withTimeout(saengRef.child('records/'+_monthStatusMo+'/'+_monthStatusCd).once('value'),5000);
+        _lsStatus=_r.val()?.status||'';
+      }catch(e){ console.warn('[readonly-check] 최신 상태 확인 실패 — 잠금 유지',e); return; } // 확인 못 하면 잠근 채로 둔다(fail-closed)
+      if(_recToken.fired) return; // await 하는 동안 records 리스너가 도착했으면 그게 이긴다
+      if(!me||me.cd!==_monthStatusCd||currentMonth!==_monthStatusMo) return; // await 중 계정/월 전환
+      // 2026-09-05 정책 변경: 제출됨도 잠금 대상(교사 반려 전까지 수정 불가).
+      const _keepLocked=_lsStatus==='approved'||_lsStatus==='submitted'||(_lsStatus==='rejected'&&!_rejectionConfirmed);
       if(!_keepLocked){
         formLocked=false;
         setFormLocked(false);
         document.getElementById('submitBtn').disabled=false;
-        // 제출 후에는 임시저장 비활성 유지 — fillForm이 disabled=true로 설정한 것을 덮지 않음
-        if(_lsStatus!=='submitted'){
-          document.getElementById('saveDraftBtn').disabled=false;
-        }
+        { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=false; }
       }
     }
   });
   
   _myRecordRef=saengRef.child('records/'+currentMonth+'/'+me.cd);
+  /* 승인 알림(🎉)은 학급회의(_clsApplyStatus 의 first 패턴)와 똑같이 "지금 보는 동안 실제로
+     승인으로 바뀐 순간"에만 띄운다 — 이 리스너를 새로 붙이며 받는 첫 스냅샷(이미 승인된 채로
+     열었을 수도 있다)은 제외하고, 그 이후 상태가 진짜로 'approved' 가 아니던 데서 'approved' 로
+     바뀔 때만 띄운다. listenMyRecord() 가 다시 불릴 때마다(월/학생이 바뀔 때) 새로 초기화된다. */
+  let _apprSeenFirst=false, _apprPrevStatus=undefined;
   const lsKey='sw_lastRecord_'+me.cd+'_'+currentMonth;
   const draftKey='sw_draft_'+me.cd+'_'+currentMonth;
   const canvasKey='sw_canvas_'+me.cd+'_'+currentMonth;
   // 월 생성 시각을 먼저 확인하여 stale draft 폐기 판정
   let monthOpenedAt=0;
+  /* ⚠️ 아래 폐기 판정은 **교사가 쓴 opened_at**과 **학생 기기의 draft 시각**을 비교한다 = 기기 간 비교.
+     맞으면 학생의 로컬 draft·캔버스 백업·마지막 기록 캐시가 **지워진다**(미제출 작성분은 로컬에만
+     있으므로 곧 영구 손실이다). 교사가 수업 중 월을 마감→재개하면 opened_at이 그때로 갱신되므로,
+     시계가 어긋난 기기에서는 방금 쓴 draft가 "월 재생성 전 것"으로 오판돼 날아간다.
+     opened_at은 위에서 서버 시각으로 바꿨지만 학생 draft 시각은 여전히 그 기기 시계다
+     (draft/record 시각 체계를 통째로 바꾸면 기존 저장분과 어긋나 1회성 유실이 생겨 하지 않는다).
+     → 유예를 둔다. 이 판정의 목적은 "며칠 전 삭제된 월의 유령 draft" 청소이지 분 단위 순서 판정이
+     아니다. 못 지우는 쪽 실패는 무해하고(draft.month 일치·_mergeDraftOverServer가 서버를 지킨다),
+     잘못 지우는 쪽 실패는 복구 불가다. */
+  const _SKEW_GRACE=24*60*60*1000;
   const monthOpenedPromise=saengRef.child('month_status/'+currentMonth).once('value').then(s=>{
     monthOpenedAt=Number(s.val()?.opened_at)||0;
     try{
@@ -2141,7 +2383,7 @@ function listenMyRecord(){
       if(draftRaw){
         const draft=JSON.parse(draftRaw);
         const dTs=Number(draft&&draft.updated_at)||0;
-        if(monthOpenedAt && dTs && monthOpenedAt>dTs){
+        if(monthOpenedAt && dTs && monthOpenedAt>dTs+_SKEW_GRACE){
           localStorage.removeItem(draftKey);
           localStorage.removeItem(canvasKey);
           localStorage.removeItem(lsKey);
@@ -2157,12 +2399,14 @@ function listenMyRecord(){
           // 타임스탬프 비교 추가: 다른 기기에서 더 최신 draft-status 기록을 만든 경우(rTs>dTs)
           //   옛 로컬 draft가 화면을 덮지 않도록 스킵 → 아래 리스너가 서버 최신본으로 채운다.
           const rTs=Number(lastServer&&lastServer.updated_at)||0;
-          if(!serverLocked && dTs>=rTs) fillForm(draft);
+          if(rTs>_lastSrvTs) _lastSrvTs=rTs;
+          if(!serverLocked && dTs>=rTs)fillForm(draft);
         }
       }
     }catch(e){}
   });
   _myRecordListener=_myRecordRef.on('value',snap=>{
+    _recToken.fired=true; // 이 시점부터 진짜 서버 상태로 그렸다 — 위 캐시 기반 잠금해제가 덮으면 안 된다
     const d=snap.val();
     if(!d){
       try{localStorage.removeItem(lsKey);}catch(e){}
@@ -2173,7 +2417,7 @@ function listenMyRecord(){
         if(draftRaw){
           const draft=JSON.parse(draftRaw);
           const dTs=Number(draft&&draft.updated_at)||0;
-          if(monthOpenedAt && dTs && monthOpenedAt>dTs){
+          if(monthOpenedAt && dTs && monthOpenedAt>dTs+_SKEW_GRACE){
             localStorage.removeItem(draftKey);
             localStorage.removeItem(canvasKey);
           } else if(draft&&draft.month===currentMonth){
@@ -2184,6 +2428,7 @@ function listenMyRecord(){
       resetForm();return;
     }
     try{localStorage.setItem(lsKey,JSON.stringify(d));}catch(e){}
+    { const _s=Number(d.updated_at)||0; if(_s>_lastSrvTs) _lastSrvTs=_s; }
     // 로컬 draft가 remote보다 최신이면 draft 우선 (debounce 중에 새로고침된 경우 입력 보존)
     let useData=d;
     try{
@@ -2192,19 +2437,32 @@ function listenMyRecord(){
         const draft=JSON.parse(draftRaw);
         const dTs=Number(draft&&draft.updated_at)||0;
         const rTs=Number(d.updated_at)||0;
-        // 승인/제출 상태가 remote에서 바뀐 경우는 remote 우선
-        const remoteLocked=(d.status==='approved'); // submitted/rejected는 학생이 계속 수정 가능 — 로컬 draft 우선 허용
+        // 승인/제출 상태가 remote에서 바뀐 경우는 remote 우선.
+        //   2026-09-05 정책 변경으로 제출(submitted)도 즉시 잠기므로 approved와 같이 취급한다
+        //   (반려만 재수정 가능 — 폼이 잠겨 있는데 화면엔 옛 로컬 draft 글이 보이면 혼란스럽다).
+        const remoteLocked=(d.status==='approved'||d.status==='submitted');
         if(!remoteLocked && draft && draft.month===currentMonth && dTs>rTs){
           useData=_mergeDraftOverServer(d,draft); // 빈 draft 필드가 서버 기록을 덮지 않도록(전체 스냅샷 clobber 방지)
         }
       }
     }catch(e){}
+    // ⚠️ useData(로컬 draft 와 병합될 수 있다)가 아니라 d(서버 원본)로 판정한다 —
+    //   병합은 표시용일 뿐, "선생님이 방금 승인했다"는 서버에서 실제로 일어난 사실이어야 한다.
+    const _apprIsFirst=!_apprSeenFirst; _apprSeenFirst=true;
+    const _apprJustApproved=!_apprIsFirst&&d.status==='approved'&&_apprPrevStatus!=='approved';
+    _apprPrevStatus=d.status;
     fillForm(useData);
+    if(_apprJustApproved) showClsNotice('🎉','선생님이 확인했어요!','생활기록부를 잘 받았어요.\n이제 고칠 수 없어요.',
+        'linear-gradient(135deg,#66BB6A,#2E7D32)','#1B5E20');
     // 서버 데이터(또는 서버 기반 병합)로 baseline을 채웠다 → 이후 autoSave의 빈 필드는 의도적 삭제로 신뢰 가능.
     //   즉시복원 fillForm(로컬draft)는 이 지점을 안 지나므로 _serverReconciled가 안 켜진다.
     //   단 fillForm이 month 불일치(손상 데이터)로 early-return해 폼을 비운 경우엔 켜지 않는다 —
     //   빈 폼이 full:true로 승격돼 통째병합이 서버를 덮는 것 방지(fillForm 초입 가드와 동일 조건).
-    if(!(useData.month && useData.month!==currentMonth)) _serverReconciled=true;
+    //   ⚠️ _fbOnline 필수(학급회의와 같은 이유): 오프라인에서 💾를 누르면 그 쓰기의 local echo가
+    //   이 리스너를 깨우는데, 캐시가 비어 있던 태블릿에선 useData가 "방금 내가 쓴 조각"뿐이다.
+    //   그걸 서버 화해로 오인하면 다음 💾가 full 스냅샷으로 승격돼(_stripUnreconciled 우회)
+    //   재연결 시 서버의 진짜 기록을 빈 값으로 덮는다. autoSave의 full 플래그도 같은 경로로 뚫렸다.
+    if(!(useData.month && useData.month!==currentMonth) && _fbOnline) _serverReconciled=true;
     // 학생 확인은 이벤트 상점의 [확인] 버튼 클릭으로만 갱신됨 (자동 X)
   });
 }
@@ -2226,12 +2484,15 @@ function fillForm(data){
   document.getElementById('rejectedBanner').classList.toggle('hidden',!isRejected);
   if(isRejected&&data.rejected_reason) document.getElementById('rejectedReason').textContent=data.rejected_reason;
   // 반려 시: 새로고침 후에도 이미 확인한 반려면 모달 스킵
+  //   ⚠️ 사유 텍스트로 판단하면 같은 문구로 다시 반려할 때 창이 안 뜬다(학급회의에서 겪은 버그와 동일).
+  //   반려 시각(rejected_at)으로 판단한다(옛 기록은 시각이 없으니 사유 텍스트로 폴백).
   if(isRejected&&me){
     try{
       const _ck='sw_rejConfirmed_'+me.cd+'_'+currentMonth;
+      const _mark=String(data.rejected_at||data.rejected_reason||'');
       const _cr=localStorage.getItem(_ck);
       if(_cr!==null){
-        if(_cr===(data.rejected_reason||'')){_rejectionConfirmed=true;}  // 같은 반려 → 확인 유지
+        if(_cr===_mark){_rejectionConfirmed=true;}  // 같은 반려 → 확인 유지
         else{_rejectionConfirmed=false;localStorage.removeItem(_ck);}    // 새 반려 → 다시 확인 필요
       }
     }catch(e){}
@@ -2240,32 +2501,30 @@ function fillForm(data){
   if(isRejected&&!_rejectionConfirmed){
     formLocked=true;
     document.getElementById('submitBtn').disabled=true;
-    document.getElementById('saveDraftBtn').disabled=true;
+    { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=true; }
     setFormLocked(true);
+    _rejConfirmMark=String(data.rejected_at||data.rejected_reason||'');
     showRejectionNotice(data.rejected_reason||'');
   } else if(_readonlyMode){
     formLocked=true;
     document.getElementById('submitBtn').disabled=true;
-    document.getElementById('saveDraftBtn').disabled=true;
+    { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=true; }
     setFormLocked(true);
   } else {
-    // 승인 또는 배달 완료면 잠금. 제출됨 상태에서는 수정/재제출 가능 (임시저장 버튼만 비활성)
+    // 2026-09-05 정책 변경: 제출되면 즉시 잠근다(교사가 반려하기 전까지 수정/재제출 불가).
     //   배달 후 수정을 허용하면 이미 친구 가방에 들어간 달고나를 되돌릴 수 없는데도
     //   수신자를 바꿀 수 있어, 보낸 학생 쿠키가 5개 더 빠지거나 변경이 조용히 무시된다.
     //   record_delivered_at은 배달 시 보낸 학생 기록에 이미 기록되므로 추가 조회가 필요 없다.
-    const _lock=isApproved||isDelivered;
+    const _lock=isApproved||isDelivered||isSubmitted;
     formLocked=_lock;
     document.getElementById('submitBtn').disabled=_lock;
-    document.getElementById('saveDraftBtn').disabled=_lock||isSubmitted;
+    { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=_lock; }
     setFormLocked(_lock);
   }
   // 제출 버튼 라벨 상태별 갱신
   const _submitBtn=document.getElementById('submitBtn');
   if(_submitBtn){
-    if(isDelivered) _submitBtn.textContent='📦 배달완료 (수정 불가)';
-    else if(isApproved) _submitBtn.textContent='✅ 승인됨';
-    else if(isSubmitted) _submitBtn.textContent='✅ 제출됨';
-    else if(isRejected) _submitBtn.textContent='↻ 다시 제출';
+    if(isDelivered||isApproved||isSubmitted) _submitBtn.textContent='✅ 제출됨';
     else _submitBtn.textContent='📮 제출하기';
   }
   // 학생이 입력 중이면(승인 등으로 잠긴 경우는 제외) 입력칸 값을 덮어쓰지 않음 — 작성 중 텍스트 유실 방지
@@ -2359,10 +2618,17 @@ function fillForm(data){
   });
 }
 
+/* ⚠️ 범위는 반드시 #personalFormArea 여야 한다.
+   예전엔 #studentApp 과 전역 .gem-chip 을 잡아, **개인 기록이 잠기면 학급회의까지 잠겼다** —
+   학급회의 쿠키도 같은 .gem-chip 클래스라 pointer-events:none 이 걸려 **클릭이 완전 무반응**이 됐고
+   (clsSetLocked 는 pointer-events 를 되돌리지 않아 영영 풀리지 않는다),
+   clsGood/clsBad/clsWish 도 함께 disabled 됐다.
+   월이 마감되거나 승인되면 개인 폼은 늘 잠기므로, 그때마다 학급회의를 못 쓰게 되는 상태였다. */
 function setFormLocked(locked){
-  document.querySelectorAll('#studentApp textarea,#studentApp input:not(.color-dot):not(#brushSize),#studentApp select').forEach(f=>f.disabled=locked);
-  document.querySelectorAll('.gem-chip').forEach(el=>el.style.pointerEvents=locked?'none':'');
-  document.querySelectorAll('.gift-option').forEach(el=>el.style.pointerEvents=locked?'none':'');
+  const A='#personalFormArea ';
+  document.querySelectorAll(A+'textarea,'+A+'input:not(.color-dot):not(#brushSize),'+A+'select').forEach(f=>f.disabled=locked);
+  document.querySelectorAll(A+'.gem-chip').forEach(el=>el.style.pointerEvents=locked?'none':'');
+  document.querySelectorAll(A+'.gift-option').forEach(el=>el.style.pointerEvents=locked?'none':'');
 }
 function showSubmitErrorModal(errors){
   const list=document.getElementById('submitErrorList');
@@ -2379,7 +2645,9 @@ function closeSubmitErrorModal(){
   document.getElementById('submitErrorModal').classList.add('hidden');
 }
 function showRejectionNotice(msg){
-  document.getElementById('rejectionNoticeMsg').textContent=msg;
+  const el=document.getElementById('rejectionNoticeMsg');
+  el.textContent=msg||'';
+  el.classList.toggle('hidden',!msg);   // 사유가 없으면 노란 상자를 숨긴다(학급회의와 같은 규칙)
   document.getElementById('rejectionNoticeModal').classList.remove('hidden');
 }
 function confirmRejectionNotice(){
@@ -2387,13 +2655,12 @@ function confirmRejectionNotice(){
   document.getElementById('rejectionNoticeModal').classList.add('hidden');
   // 새로고침 후에도 모달이 다시 뜨지 않도록 확인된 반려 메시지를 localStorage에 저장
   try{
-    const _reason=document.getElementById('rejectionNoticeMsg')?.textContent||'';
-    if(me) localStorage.setItem('sw_rejConfirmed_'+me.cd+'_'+currentMonth,_reason);
+    if(me) localStorage.setItem('sw_rejConfirmed_'+me.cd+'_'+currentMonth,_rejConfirmMark||'');
   }catch(e){}
   // 폼 잠금 해제
   formLocked=false;
   document.getElementById('submitBtn').disabled=false;
-  document.getElementById('saveDraftBtn').disabled=false;
+  { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=false; }
   setFormLocked(false);
 }
 
@@ -2431,7 +2698,7 @@ async function saveRecord(status='draft'){
     //   me.cd/currentMonth를 await 뒤에 다시 읽으면 6월 내용이 7월 노드에, A의 글이 B의 노드에 써진다.
     const _cd=me.cd, _mo=currentMonth;
     try{
-      const _draftTs=Date.now();
+      const _draftTs=_draftStamp(_lastSrvTs);   // 서버 기록과 비교되는 값(위 autoSave 와 같은 기준)
       const _draftData={...data,updated_at:_draftTs}; // full은 서버로 새면 안 됨 → 아래 localStorage 쓰기에만 붙인다
       // 제출/승인/반려 상태 UI가 표시 중이면 status를 덮어쓰지 않음 (autoSave와 동일 가드).
       //   없으면 타이머 만료 자동 임시저장(startTimerClient)이 서버 status를 submitted/rejected→draft로
@@ -2442,7 +2709,10 @@ async function saveRecord(status='draft'){
       const _shown=el=>el&&!el.classList.contains('hidden');
       if(_shown(_sb)||_shown(_rb)||_submitIssued.has(_cd+'_'+_mo)) delete _draftData.status;
       // 로컬을 항상 먼저 확정 — 그림 업로드/서버 쓰기가 실패해도 작성 내용은 이 태블릿에 남는다.
-      try{localStorage.setItem('sw_draft_'+_cd+'_'+_mo,JSON.stringify({..._draftData,full:true}));_lsOk=true;}catch(e){} // 💾 = 완전한 의도 → 로컬 draft에만 full:true(삭제 보존용)
+      //   full은 로컬 draft에만 붙인다(서버로 새면 안 됨). ⚠️ 무조건 true는 틀리다 —
+      //   "💾 = 완전한 의도"는 학생이 **서버 내용을 보고** 눌렀을 때만 참이다. 리스너가 오기 전
+      //   빈 폼에서 누른 💾에 full:true를 달면, 다음 리스너 병합이 {...d,...draft}로 서버를 비운다((64)와 같은 함정).
+      try{localStorage.setItem('sw_draft_'+_cd+'_'+_mo,JSON.stringify({..._draftData,full:_serverReconciled}));_lsOk=true;}catch(e){}
       // 그림도 임시저장 시 업로드. 마지막 업로드 이후 편집이 없으면 건너뛴다 —
       //   불필요한 업로드를 막고, 로컬 백업(축소 JPEG)에서 복원만 한 캔버스를 그대로 올려
       //   원격 원본 PNG를 저해상으로 덮는 화질 저하도 막는다.
@@ -2457,13 +2727,13 @@ async function saveRecord(status='draft'){
       }
       // 여기서 "월이 바뀌었으면 포기"하면 안 된다 — _mo/_cd로 쓰므로 6월 내용은 6월 노드에
       //   정확히 들어간다. 포기하면 오히려 그 편집분이 로컬에만 남아 서버에 안 올라간다.
-      let _svOk=true;
-      try{ await _withTimeout(saengRef.child('records/'+_mo+'/'+_cd).update(_draftData),15000); }
-      catch(e){ _svOk=false; }
-      if(_svOk&&_drawOk) toast('💾 임시저장 완료!');
-      else if(!_svOk&&!_lsOk) toast('⚠️ 저장 실패! 인터넷 확인 후 다시 눌러주세요');
-      else if(!_svOk) toast('⚠️ 이 태블릿에만 저장됨 (인터넷 확인)');
-      else toast('⚠️ 글은 저장됐지만 그림 전송 실패 (인터넷 확인)');
+      /* ⚠️ 작성 중에는 **서버로 보내지 않는다**(2026-09-04 정책) — 서버 쓰기는 제출 때뿐이다.
+         그래서 여기서는 로컬 저장까지만 하고, 미저장 표시(=아직 제출 안 함)도 끄지 않는다.
+         이 경로는 지금 UI 에서 도달하지 않지만(임시저장 버튼 제거), 남겨 두면 나중에 누가 불러
+         작성 중 글이 서버로 새는 통로가 되므로 쓰기를 아예 없앤다. */
+      if(!_lsOk) toast('⚠️ 저장 실패! 저장 공간을 확인해 주세요');
+      else if(!_drawOk) toast('⚠️ 글은 저장됐지만 그림 저장 실패');
+      else toast('✏️ 이 태블릿에 저장됐어요');
     } catch(e){
       // 예상 못 한 실패(예: CORS로 캔버스가 tainted면 getCanvasData의 toDataURL이 throw).
       //   위에서 로컬 저장은 이미 끝냈으므로 작성 내용은 안전 — 서버 반영만 실패했다고 알린다.
@@ -2479,6 +2749,8 @@ async function saveRecord(status='draft'){
         const _sbNow=document.getElementById('submittedBanner');
         _btn.disabled=!!(formLocked||(_sbNow&&!_sbNow.classList.contains('hidden')));
       }
+      // ⚠️ 위 복원은 **저장 시작 시점 문구**('저장 안 됨')를 되돌린다 — 문구의 주인은 미저장 표시다.
+      //   학급회의에서 똑같이 당했다(저장해도 계속 '저장 안 됨'으로 보임).
     }
     return;
   }
@@ -2488,7 +2760,7 @@ async function saveRecord(status='draft'){
   //   await 뒤에 me.cd/currentMonth를 다시 읽으면 6월 내용이 7월 노드에 submitted로 써지고
   //   6월은 영영 미제출로 남으며, 7월의 로컬 캔버스 백업이 지워지고, 로그아웃했다면 me가 null이라 throw한다.
   const _cd=me.cd, _mo=currentMonth, _nm=me.nm;
-  data.submitted_at=Date.now();
+  data.submitted_at=_svNow();   // 교사 화면이 학생들 사이 제출 순서를 정렬하는 값
   const _blank=isCanvasBlank();
   console.log('[saveRecord] status=', status, 'isCanvasBlank=', _blank);
   if(!_blank){
@@ -2529,7 +2801,7 @@ async function saveRecord(status='draft'){
   // 발행 사실을 await 앞에 기록한다 — 타임아웃이어도 이 쓰기는 살아있으므로,
   //   이후 임시저장이 status:'draft'로 제출을 풀어버리지 않도록 막아야 한다.
   _submitIssued.add(_cd+'_'+_mo);
-  try{ await _withTimeout(saengRef.child('records/'+_mo+'/'+_cd).update({...data,updated_at:Date.now()}),15000); }
+  try{ await _withTimeout(saengRef.child('records/'+_mo+'/'+_cd).update({...data,updated_at:_svNow()}),15000); }
   catch(e){ throw new Error('submit record write timeout'); } // → doFinalSubmit이 "다시 제출해주세요" 안내
   _formEditingDirty=false;
   _rejectionConfirmed=false; // 재제출 후 다음 반려도 알림창이 뜨도록
@@ -2553,9 +2825,10 @@ async function saveRecord(status='draft'){
   if(!me||me.cd!==_cd||currentMonth!==_mo) return;
   document.getElementById('submittedBanner').classList.remove('hidden');
   document.getElementById('rejectedBanner').classList.add('hidden');
-  document.getElementById('submitBtn').disabled=false;
-  document.getElementById('saveDraftBtn').disabled=true;
-  formLocked=false; setFormLocked(false);
+  // 2026-09-05 정책 변경: 제출되면 즉시 잠근다 — 리스너 echo를 기다리지 않고 여기서 바로 반영한다.
+  document.getElementById('submitBtn').disabled=true;
+  { const _sdb=document.getElementById('saveDraftBtn'); if(_sdb) _sdb.disabled=true; }
+  formLocked=true; setFormLocked(true);
   toast('📮 제출 완료!');
 }
 
@@ -2633,6 +2906,12 @@ async function submitRecord(){
   const proSelEl=document.getElementById('promisingSelect');
   if(!defSel){markError(defSelEl);errors.push('🛡️ 방어자 친구를 선택해주세요');if(!firstEl)firstEl=defSelEl;}
   if(!proSel){markError(proSelEl);errors.push('🌟 유망주 친구를 선택해주세요');if(!firstEl)firstEl=proSelEl;}
+  // 방어자·유망주는 같은 친구 중복 선택 금지
+  if(defSel&&proSel&&defSel===proSel){
+    markError(defSelEl);markError(proSelEl);
+    errors.push('🛡️🌟 방어자와 유망주는 같은 친구로 고를 수 없어요');
+    if(!firstEl)firstEl=proSelEl;
+  }
 
   // 능력 태그 선택 필수 (부족/가득)
   if(lackSelected.size===0){
@@ -2705,7 +2984,12 @@ async function submitRecord(){
       // 본인 노드만 읽는다. 예전엔 stu 전체 노드(전교생 inv, 월마다 누적)를 받아 본인 것 하나를
       //   골라 썼다 — 마감 직전 30명이 동시에 제출하면 부팅 때와 맞먹는 다운로드가 한 번 더 몰렸고,
       //   검증에 걸려 다시 누를 때마다 또 받았다. 필요한 건 필드 3개뿐이다.
-      const myStu = await _fetchMyStu();
+      //   ⚠️ 타임아웃 필수 + fail-open. _fetchMyStu의 once('value')는 오프라인이면 resolve도
+      //   reject도 하지 않아 try/catch로도 못 잡는다 → 아래 showSubmitConfirmModal에 영영 못 와
+      //   **제출 버튼이 아무 반응 없이 죽는다**(학생은 이유도 모른다). 잔액 검사는 사전 안내일 뿐이고,
+      //   진짜 차감 게이트는 발송 때 senderCookieAvail이 다시 잡으므로 못 읽으면 통과시킨다.
+      //   (doFinalSubmit의 배달여부 백스톱과 같은 판단.)
+      const myStu = await _withTimeout(_fetchMyStu(),8000);
       if(myStu){
         // 🎫 상점이용권 + 🍪 월요쿠키 + 🍪 쿠키 합산(발송 시 이용권·월요쿠키가 우선 차감된다)
         const cookieAvail = (myStu.cookie||0) - (myStu.usedCookie||0) - (myStu.shopUsed||0);
@@ -2758,7 +3042,7 @@ async function doFinalSubmit(){
     catch(e){ console.warn('[submit] 배달여부 확인 실패 — 진행', e); }
     if(_dl){
       showSubmitErrorModal(['📦 이미 친구에게 배달이 완료된 기록이에요.\n배달된 뒤에는 수정하거나 다시 제출할 수 없어요.']);
-      if(sb){sb.disabled=true;sb.textContent='📦 배달완료 (수정 불가)';}
+      if(sb){sb.disabled=true;sb.textContent='✅ 제출됨';}
       return;
     }
     // 제출한 달/학생을 붙잡아 둔다 — saveRecord는 업로드 대기 중 월이 바뀌면 배너/토스트를
@@ -2851,9 +3135,8 @@ window.addEventListener('pagehide', _flushCanvasSave);
 window.addEventListener('beforeunload', _flushCanvasSave);
 document.addEventListener('visibilitychange', function(){ if(document.hidden) _flushCanvasSave(); });
 // 우리 반 대기 저장도 같은 시점에 확정 (탭 닫기·백그라운드 전환)
-window.addEventListener('pagehide', ()=>_clsFlush());
-window.addEventListener('beforeunload', ()=>_clsFlush());
-document.addEventListener('visibilitychange', function(){ if(document.hidden) _clsFlush(); });
+/* 탭을 닫을 때 묻지 않는다 — 쓰는 즉시 이 태블릿(localStorage)에 저장되므로 닫아도 잃는 게 없다.
+   (예전엔 서버에 안 올라간 글을 경고했지만, 이제 서버 전송은 제출 때만이라 경고가 늘 뜬다) */
 // 한 획을 오래 긋는 도중 튕기면 그 획이 유실됨(백업은 획 끝에만 예약). 획은 캔버스에 실시간 반영되므로
 //   그리는 중에는 주기적으로 로컬 백업해 mid-stroke 크래시에 대비.
 setInterval(function(){ if(drawing && me && canvas) _writeCanvasDraft(); }, 4000);
@@ -3316,14 +3599,13 @@ async function forceClientReload(){
   toast('🔄 새로고침 신호 전송됨');
 }
 function listenBuzzer(){
-  saengRef.child('buzzer').off('value'); // 재로그인 시 중복 attach 방지
-  saengRef.child('buzzer').on('value',snap=>{
-    const data=snap.val()||{};
+  _buzzAttach(()=>{
     const overlay=document.getElementById('buzzerOverlay');
     const btn=document.getElementById('buzzerBtn');
-    if(data.active){
+    if(!overlay||!btn||!me) return;
+    if(_buzzActive){
       overlay.classList.remove('hidden');
-      const list=data.pressList?Object.values(data.pressList).sort((a,b)=>a.time-b.time):[];
+      const list=_buzzList();
       const myRank=list.findIndex(p=>String(p.cd)===String(me.cd));
       const rankText=['🥇 1등!','🥈 2등!','🥉 3등!','4번째','5번째','6번째','7번째','8번째','9번째','10번째'];
       if(myRank>=0){
@@ -3338,28 +3620,67 @@ function listenBuzzer(){
     }
   });
 }
+/* 누른 순서 판정용 시각. ⚠️ 절대 Date.now()를 쓰지 말 것 —
+   등수를 `sort(a.time-b.time)`으로 매기는데 태블릿마다 시계가 어긋나 있으면
+   **시계가 느린 태블릿이 항상 1등**이 된다(교실 태블릿은 실제로 몇 분씩 어긋난다).
+   서버 시각이 유일하게 공정한 기준이다. v8 SDK는 로컬 echo에서도 서버 시각 오차 추정으로
+   숫자를 채워 주므로 즉시 정렬에도 문제가 없다. */
+const _buzzTime=()=>firebase.database.ServerValue.TIMESTAMP;
+// 아직 서버 확정 전이라 숫자가 아니면 **맨 뒤**로 보낸다(못 받은 등수를 앞세우지 않는 방향).
+//   Infinity가 아니라 MAX_SAFE_INTEGER — 미확정 둘을 비교할 때 Infinity-Infinity=NaN이라
+//   비교 함수가 무효가 된다(정렬 결과가 구현 정의로 흐트러진다).
+const _buzzOrd=v=>(typeof v==='number'&&isFinite(v))?v:Number.MAX_SAFE_INTEGER;
+/* ── 부저 상태: 증분 수신 ──
+   예전엔 buzzer 노드를 통째로 on('value') 했다. 한 명이 누를 때마다 **31대 전원이 pressList
+   전체를 다시** 받아 O(n²)였다(30명 1라운드 ≈ 1 MB, 이 앱 최대 밀도 지점).
+   active(값 하나)와 pressList(child_* 증분)를 나누면 누를 때마다 한 명분(~60 B)만 오간다.
+   ⚠️ 라운드 초기화는 서버가 pressList 를 비우는 것으로 이뤄지고, 그때 child_removed 가
+   각 항목마다 오므로 로컬 맵도 저절로 빈다 — active 전환에서 임의로 비우지 않는다.
+   (리스너 도착 순서에 따라 이미 받은 child_added 를 지워 버릴 수 있다) */
+let _buzzActive=false, _buzzPresses={}, _buzzRefs=[];
+// cd 를 RTDB 키로 쓴다 — 고정 키라 몇 번을 눌러도 항목이 하나다(예전 push()는 중복 방지를 위해
+//   누를 때마다 노드 전체를 먼저 읽어야 했다). 키에 못 쓰는 문자는 치환한다.
+const _buzzKey=cd=>String(cd).replace(/[.#$/\[\]%]/g,c=>'%'+c.charCodeAt(0).toString(16));
+const _buzzList=()=>Object.values(_buzzPresses).sort((a,b)=>_buzzOrd(a&&a.time)-_buzzOrd(b&&b.time));
+function _buzzDetach(){
+  _buzzRefs.forEach(([r,ev,cb])=>{ try{ r.off(ev,cb); }catch(_){} });
+  _buzzRefs=[]; _buzzPresses={}; _buzzActive=false;
+}
+function _buzzAttach(render){
+  _buzzDetach();   // 재로그인 시 중복 attach 방지(예전 off('value')와 같은 목적)
+  const bind=(ref,ev,fn)=>{ const cb=ref.on(ev,fn); _buzzRefs.push([ref,ev,cb]); };
+  const aRef=saengRef.child('buzzer/active'), pRef=saengRef.child('buzzer/pressList');
+  bind(aRef,'value',    s=>{ _buzzActive=!!s.val(); render(); });
+  bind(pRef,'child_added',  s=>{ _buzzPresses[s.key]=s.val()||{}; render(); });
+  bind(pRef,'child_changed',s=>{ _buzzPresses[s.key]=s.val()||{}; render(); });
+  bind(pRef,'child_removed',s=>{ delete _buzzPresses[s.key]; render(); });
+}
 async function pressBuzzer(){
-  const snap=await saengRef.child('buzzer').once('value');
-  const data=snap.val()||{};
-  if(!data.active) return;
-  const list=data.pressList?Object.values(data.pressList):[];
-  if(list.find(p=>String(p.cd)===String(me.cd))) return;
-  await saengRef.child('buzzer/pressList').push({cd:me.cd,name:me.nm,time:Date.now()});
+  try{
+    if(!_buzzActive) return;                 // 리스너가 이미 알고 있다(예전엔 이걸 위해 노드를 통째로 읽었다)
+    const k=_buzzKey(me.cd);
+    if(_buzzPresses[k]) return;              // 이미 누름
+    // 고정 키 + 트랜잭션 = 첫 기록만 남는다(연타·다른 기기 동시 누름 모두 안전).
+    //   cur===null 이면 쓰고, 이미 있으면 abort — 로컬 캐시가 비어 cur=null 로 먼저 돌아도
+    //   서버에 값이 있으면 재실행되어 abort 되므로 등수(time)가 덮이지 않는다.
+    // 타임아웃: 오프라인이면 끝나지 않아 학생은 아무 반응 없는 버튼을 계속 두드린다.
+    await _withTimeout(saengRef.child('buzzer/pressList/'+k)
+      .transaction(cur=>cur===null?{cd:me.cd,name:me.nm,time:_buzzTime()}:undefined),5000);
+  }catch(e){ toast('⚠️ 연결이 느려요 — 다시 눌러주세요'); }
 }
 
 // ═══ 부저 (교사) ═══
 function listenBuzzerTeacher(){
-  saengRef.child('buzzer').off('value'); // 재로그인 시 중복 attach 방지
-  saengRef.child('buzzer').on('value',snap=>{
-    const data=snap.val()||{};
+  _buzzAttach(()=>{
     const startBtn=document.getElementById('buzzerStartBtn');
     const statusLabel=document.getElementById('buzzerStatusLabel');
     const listEl=document.getElementById('teacherBuzzerList');
+    if(!startBtn||!statusLabel||!listEl) return;
     const rankEmoji=['🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-    if(data.active){
+    if(_buzzActive){
       startBtn.className='buzzer-big-btn stop';startBtn.textContent='⏹️';
       statusLabel.textContent='🔴 부저 진행 중';
-      const list=data.pressList?Object.values(data.pressList).sort((a,b)=>a.time-b.time):[];
+      const list=_buzzList();
       const allStus=(shopData.stu||[]).filter(s=>s.nm);
       const pressedIds=new Set(list.map(p=>String(p.cd)));
       const notPressed=allStus.filter(s=>!pressedIds.has(String(s.cd)));
@@ -3382,10 +3703,11 @@ function listenBuzzerTeacher(){
   });
 }
 async function toggleBuzzer(){
-  const snap=await saengRef.child('buzzer').once('value');
-  const data=snap.val()||{};
-  if(data.active) await saengRef.child('buzzer').set({active:false,pressList:{}});
-  else await saengRef.child('buzzer').set({active:true,pressList:{}});
+  // active 하나만 읽는다(예전엔 pressList 까지 통째로 받았다). 리스너 값이 있어도
+  //   버튼을 누른 순간의 서버 값으로 판단하는 편이 안전하다(두 기기에서 동시에 눌렀을 때).
+  const cur=(await saengRef.child('buzzer/active').once('value')).val();
+  // set 으로 통째 교체 = pressList 가 함께 비워진다(라운드 초기화). 학생 쪽은 child_removed 로 받는다.
+  await saengRef.child('buzzer').set({active:!cur,pressList:{}});
 }
 
 // ═══ 타이머 ═══
@@ -3408,7 +3730,7 @@ function listenTimerStudent(){
     endOverlay.classList.add('hidden');
     if(d.active&&!d.paused){
       box.classList.remove('hidden');
-      const rem=Math.max(0,Math.round((d.end_at-Date.now())/1000));
+      const rem=Math.max(0,Math.round((d.end_at-_svNow())/1000));
       timerLocalRemaining=rem;
       startTimerClient(d.end_at);
     } else if(d.active&&d.paused){
@@ -3427,7 +3749,7 @@ function listenTimerStudent(){
 function startTimerClient(end_at){
   stopTimerClient();
   timerInterval=setInterval(()=>{
-    const rem=Math.max(0,Math.round((end_at-Date.now())/1000));
+    const rem=Math.max(0,Math.round((end_at-_svNow())/1000));
     const box=document.getElementById('stuTimerBox');
     box.textContent=fmtTime(rem);
     box.classList.toggle('blink',rem<=10&&rem>0);
@@ -3446,7 +3768,7 @@ function startTimerClient(end_at){
         const _tMonth=currentMonth, _tCd=me.cd;
         setTimeout(()=>{
           if(!me||me.cd!==_tCd||currentMonth!==_tMonth||formLocked) return;
-          saveRecord('draft').catch(()=>{});
+          autoSave();   // 로컬에만 — 서버로는 제출할 때만 간다
         },Math.floor(Math.random()*15000));
       }
     }
@@ -3477,7 +3799,7 @@ function listenTimerTeacher(){
     }
     dismissBtn&&dismissBtn.classList.add('hidden');
     if(d.active&&!d.paused){
-      const rem=Math.max(0,Math.round((d.end_at-Date.now())/1000));
+      const rem=Math.max(0,Math.round((d.end_at-_svNow())/1000));
       setTimerUIRunning(true,'⏱ '+fmtTime(rem));
       startTimerClientTeacher(d.end_at);
     } else if(d.active&&d.paused){
@@ -3500,7 +3822,7 @@ let timerTeacherInterval=null;
 function startTimerClientTeacher(end_at){
   clearInterval(timerTeacherInterval);
   timerTeacherInterval=setInterval(()=>{
-    const rem=Math.max(0,Math.round((end_at-Date.now())/1000));
+    const rem=Math.max(0,Math.round((end_at-_svNow())/1000));
     const disp=document.getElementById('tTimerDisp');
     if(disp) disp.textContent='⏱ '+fmtTime(rem);
     if(rem===0){clearInterval(timerTeacherInterval);}
@@ -3523,12 +3845,12 @@ async function startTimer(){
   if(d.active&&!d.paused) return; // 이미 실행 중
   updateTimerSet();
   const rem=(d.active&&d.paused&&d.remaining)?d.remaining:timerSetSeconds;
-  await saengRef.child('timer').set({active:true,paused:false,end_at:Date.now()+rem*1000,remaining:rem,show_end:false});
+  await saengRef.child('timer').set({active:true,paused:false,end_at:_svNow()+rem*1000,remaining:rem,show_end:false});
 }
 async function pauseTimer(){
   const d=_lastTimerState;
   if(!d||!d.active||d.paused) return;
-  const rem=Math.max(0,Math.round((d.end_at-Date.now())/1000));
+  const rem=Math.max(0,Math.round((d.end_at-_svNow())/1000));
   await saengRef.child('timer').update({paused:true,remaining:rem});
 }
 async function stopTimer(){
@@ -3547,7 +3869,7 @@ async function adjustTimer(secs){
     const newRem=Math.max(5,(d.remaining||0)+secs);
     await saengRef.child('timer').update({remaining:newRem});
   } else {
-    const newEnd=Math.max(Date.now()+5000,d.end_at+secs*1000);
+    const newEnd=Math.max(_svNow()+5000,d.end_at+secs*1000);
     await saengRef.child('timer').update({end_at:newEnd});
   }
 }
@@ -3561,7 +3883,7 @@ async function dismissTimerEnd(){
 setInterval(async()=>{
   if(!isTeacher) return;
   const d=_lastTimerState||{};
-  if(d.active&&!d.paused&&!d.show_end&&d.end_at&&Date.now()>=d.end_at){
+  if(d.active&&!d.paused&&!d.show_end&&d.end_at&&_svNow()>=d.end_at){
     await saengRef.child('timer').update({show_end:true,active:false});
   }
 },1000);
@@ -3572,12 +3894,16 @@ function teacherTab(name,el){
   el.classList.add('active');
   document.querySelectorAll('.t-content').forEach(c=>c.classList.add('hidden'));
   document.getElementById('tab-'+name).classList.remove('hidden');
-  if(name!=='overview') detachOverviewListener();
-  if(name!=='classrec') _detachClsOverview();
+  // ⚠️ 탭을 떠난다고 구독을 끊지 않는다. 둘 다 child_* 증분이라 **바뀐 게 없으면 트래픽이 0**이고,
+  //   끊으면 되돌아올 때 30명분(각 ~60 KB)을 처음부터 다시 받는다. 선생님이 전체현황↔집계↔학급회의를
+  //   오가는 건 흔한 동작이라, 탭 토글 20번이면 그것만으로 1 MB 넘게 나갔다.
+  //   구독은 대상이 바뀔 때(월 선택·회의 선택)와 로그아웃에서만 끊는다 — 그 지점들은 그대로다.
   if(name==='overview'){loadOverview();renderMonthManageList();}
   if(name==='ranking') loadRanking();
-  if(name==='settings'){loadLimits();loadStuManage();loadCookieListToSettings();}
-  if(name==='classrec') loadClassOverview();
+  // 학생관리는 추가·삭제가 일어나는 곳 = 명단이 반드시 최신이어야 하는 유일한 화면.
+  //   부팅에서 뺀 EventShop/stu 전체 읽기를 여기서만 한다(탭 진입 1회).
+  if(name==='settings'){loadLimits();loadStuManage();_ensureFullStu().then(()=>loadStuManage());loadCookieListToSettings();}
+  if(name==='classrec'||name==='clsresult') loadClassOverview();
 }
 
 function initMonthSelectors(){
@@ -3601,56 +3927,10 @@ async function addMonthToSelector(){
     return alert(`이미 있는 월이에요: "${label}"\n\n다시 만들려면 먼저 월 관리에서 삭제해주세요.\n(그냥 추가하면 기존 기록이 지워질 수 있어 막았어요)`);
   }
   // 삭제됐던 월을 같은 이름으로 재생성 — 잔여 데이터(records/nominations/dalgona/drawings) 정리
-  try{
-    await saengRef.child('records/'+val).remove();
-    const nomSnap=await saengRef.child('nominations').once('value');
-    const nomVal=nomSnap.val()||{};
-    for(const [k,v] of Object.entries(nomVal)){
-      if(k.startsWith(val+'_')||(v&&v.month===val)) await saengRef.child('nominations/'+k).remove();
-    }
-    const dalSnap=await saengRef.child('dalgona').once('value');
-    const dalVal=dalSnap.val()||{};
-    for(const [k,v] of Object.entries(dalVal)){
-      if(k.startsWith(val+'_')||(v&&v.month===val)) await saengRef.child('dalgona/'+k).remove();
-    }
-    const drSnap=await firebase.database().ref('ClassData/EventShop/drawings').once('value');
-    const drVal=drSnap.val()||{};
-    for(const k of Object.keys(drVal)){
-      if(k.endsWith('_'+val)) await firebase.database().ref('ClassData/EventShop/drawings/'+k).remove();
-    }
-    // 학생 가방 events 정리
-    const stuSnap=await shopRef.child('stu').once('value');
-    const stuRaw=stuSnap.val()||{};
-    const entries=Array.isArray(stuRaw)
-      ? stuRaw.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
-      : Object.entries(stuRaw);
-    for(const [key,stu] of entries){
-      // inv는 Firebase에서 배열로도 객체로도 돌아온다(_normInv/getInv가 양쪽을 다루는 이유).
-      //   Array.isArray만 보면 객체 형태인 학생은 통째로 건너뛰어, 지운 달의 events가 그 학생
-      //   가방에 영영 남는다 — 삭제는 "성공"으로 보고된 채로.
-      const _inv=stu&&(Array.isArray(stu.inv)?stu.inv:(stu.inv?Object.values(stu.inv).filter(Boolean):null));
-      if(!_inv||!_inv.length) continue;
-      let changed=false;
-      const newInv=_inv.map(it=>{
-        if(!it||!Array.isArray(it.events)) return it;
-        const filtered=it.events.filter(ev=>{
-          const k=ev&&(ev.nomKey||ev.dalKey)||'';
-          return !(k&&k.startsWith(val+'_'));
-        });
-        if(filtered.length!==it.events.length){ changed=true; return {...it,events:filtered}; }
-        return it;
-      });
-      // 실제 삭제는 아래 _filterMonthInv 트랜잭션이 수행한다(직접 지급/구매한 special 아이템 보존 로직 포함).
-      if(changed){
-        await shopRef.child('stu/'+key+'/inv').transaction(cur=>_filterMonthInv(cur,val));
-        // 이벤트 상점의 증분 동기화가 inv 변경을 보도록 — 빠뜨리면 상점을 켜둔 학생이 옛 inv를
-        //   계속 쓰다가 다음 쓰기에서 방금 정리한 events를 되살린다.
-        try{ await shopRef.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
-      }
-    }
-  }catch(e){console.warn('월 잔여데이터 정리 실패',e);}
+  //   정리 로직은 월 삭제와 완전히 같다 — 한 벌만 둔다(두 벌이면 한쪽만 고쳐져 조용히 갈라진다).
+  try{ await _purgeMonthData(val); }catch(e){console.warn('월 잔여데이터 정리 실패',e);}
   await saveMonthToFirebase(val,label);
-  await saengRef.child('month_status/'+val).set({month:val,status:'active',opened_at:Date.now()});
+  await saengRef.child('month_status/'+val).set({month:val,status:'active',opened_at:_svNow()});
   await saengRef.child('months_hidden/'+val).remove();
   delete _hiddenCache[val];
   populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
@@ -3684,6 +3964,23 @@ function detachOverviewListener(){
   _overviewRecCache={};
   clearTimeout(_overviewRenderTimer);
 }
+/* 한 달치 기록(records/{month})은 집계·상장·PDF·쪽지 모달이 각각 다시 읽는다.
+   선생님이 전체현황 → 집계 → PDF 를 이어서 볼 때 같은 데이터를 서너 번 받는다.
+   ⚠️ "전체현황 캐시(_overviewRecCache)를 그냥 쓰면 되지 않나"는 **틀렸다** — 그 캐시는
+   child_added 로 조금씩 채워지며 "다 받았다"는 신호가 없어서, 구독 직후에 쓰면 학생이
+   빠진 PDF 가 조용히 나온다. 그래서 첫 번째는 진짜 once 로 **완전한 스냅샷**을 받고,
+   그 뒤로는 (a) 같은 달이고 (b) 그 사이 아무 변경도 안 왔고 (c) 오래되지 않았을 때만 재사용한다.
+   변경 감지는 전체현황 리스너의 child_* 이므로, 구독 중이 아닐 때는 재사용하지 않는다. */
+let _mrCache=null, _mrGen=0;
+async function _readMonthRecords(month){
+  if(_mrCache && _mrCache.month===month && _mrCache.gen===_mrGen
+     && _overviewMonth===month && _overviewListener
+     && (Date.now()-_mrCache.at)<120000) return _mrCache.data;
+  const gen=_mrGen;   // ⚠️ 읽기 **전** 세대를 잡는다 — 읽는 도중 바뀌면 캐시가 즉시 무효가 되도록
+  const v=(await saengRef.child('records/'+month).once('value')).val()||{};
+  _mrCache={month,data:v,at:Date.now(),gen};
+  return v;
+}
 function loadOverview(forceToast){
   const month=document.getElementById('tMonthSel')?.value;
   if(!month){
@@ -3705,17 +4002,17 @@ function loadOverview(forceToast){
   // child_* 리스너: 변경된 학생 1명만 다운로드 (이전: on('value')로 전체 학생 records)
   const onAdd=ref.on('child_added',s=>{
     if(_overviewMonth!==month) return;
-    _overviewRecCache[s.key]=s.val();
+    _overviewRecCache[s.key]=s.val(); _mrGen++;
     _scheduleOverviewRender();
   });
   const onCh=ref.on('child_changed',s=>{
     if(_overviewMonth!==month) return;
-    _overviewRecCache[s.key]=s.val();
+    _overviewRecCache[s.key]=s.val(); _mrGen++;
     _scheduleOverviewRender();
   });
   const onRm=ref.on('child_removed',s=>{
     if(_overviewMonth!==month) return;
-    delete _overviewRecCache[s.key];
+    delete _overviewRecCache[s.key]; _mrGen++;
     _scheduleOverviewRender();
   });
   _overviewListener={ref,onAdd,onCh,onRm};
@@ -3737,6 +4034,9 @@ window.sortOverview=function(col){
 };
 function renderOverview(records,month){
  try{
+  // 자가 치유: 기록은 있는데 명단에 없는 학생 = 미러가 낡음 → 원본 재적재 후 다시 그린다.
+  //   (표는 students 를 기준으로 그리므로, 이게 없으면 그 학생 행이 통째로 안 보인다)
+  _healRosterIfMissing(Object.keys(records||{}),()=>{ if(_overviewMonth===month) renderOverview(records,month); });
   const students=(shopData&&shopData.stu)||[];
   const titleEl=document.getElementById('overviewTitle');
   if(titleEl) titleEl.textContent='학생별 제출 현황';
@@ -3751,8 +4051,7 @@ function renderOverview(records,month){
     const time=r&&r.submitted_at?r.submitted_at:0;
     let confirmRank=0;
     if(r&&r.record_delivered_at){
-      const seen=r.student_viewed_at||0;
-      confirmRank=seen>=r.record_delivered_at?2:1;
+      confirmRank=_viewConfirmed(r)?2:1;
     }
     return {s,r,status,time,confirmRank};
   });
@@ -3773,7 +4072,7 @@ function renderOverview(records,month){
     let confirmCell='<span style="color:#bbb;font-size:12px;">-</span>';
     if(r&&r.record_delivered_at){
       const seen=r.student_viewed_at||0;
-      if(seen>=r.record_delivered_at){
+      if(_viewConfirmed(r)){
         const seenDate=new Date(seen);
         const seenStr=`${seenDate.getMonth()+1}/${seenDate.getDate()} ${String(seenDate.getHours()).padStart(2,'0')}:${String(seenDate.getMinutes()).padStart(2,'0')}`;
         confirmCell=`<span title="확인 시각: ${seenStr}" style="display:inline-flex;align-items:center;background:linear-gradient(135deg,#FF7BA9,#FF5C8D);color:white;font-weight:bold;padding:5px 16px;border-radius:14px;font-size:13px;box-shadow:0 3px 8px rgba(255,123,169,.4);">확인</span>`;
@@ -4021,10 +4320,16 @@ async function loadDetailPanel(cd,month){
 
 // 키 형식: <month>_<cd>_<type>. month에 하이픈/underscore/한글이 있을 수 있으므로 뒤(type,cd)부터 파싱
 function _parseNomKey(key){
-  const parts=key.split('_');
-  const cd=parts[parts.length-2];
-  const month=parts.slice(0,parts.length-2).join('_');
-  return {cd,month};
+  // 오른쪽부터 자르면 월의 '_' 는 견디지만 **cd 의 '_' 에는 진다**(cd 가 잘려 남의 패널이 열린다).
+  //   알려진 월 목록에서 최장 일치로 월을 먼저 확정하면 양쪽 다 안전하다.
+  const type=key.slice(key.lastIndexOf('_')+1);
+  let month='';
+  _monthKeys().forEach(m=>{ if(key.startsWith(m+'_') && m.length>month.length) month=m; });
+  if(month && key.length>month.length+type.length+1){
+    return {cd:key.slice(month.length+1, key.length-type.length-1), month};
+  }
+  const parts=key.split('_');   // 월 목록을 아직 모를 때의 폴백(예전 동작)
+  return {cd:parts[parts.length-2], month:parts.slice(0,parts.length-2).join('_')};
 }
 async function updateNom(key,status,panelId){
   await saengRef.child('nominations/'+key).update({status});
@@ -4063,7 +4368,8 @@ async function confirmReject(){
     if(fromMini) showClsStatusMini(cd);
     return;
   }
-  await saengRef.child('records/'+month+'/'+cd).update({status:'rejected',rejected_reason:reason});
+  // rejected_at: 같은 사유로 다시 반려해도 학생에게 알림창이 뜨도록 하는 표식(학급회의와 동일 규칙)
+  await saengRef.child('records/'+month+'/'+cd).update({status:'rejected',rejected_reason:reason,rejected_at:Date.now()});
   toast('🔙 반려 처리 완료');
   closeRejectModal();
   await loadDetailPanel(cd,month);
@@ -4112,8 +4418,27 @@ async function _readRawStu(){
 function _badPathKey(k){ return /[.#$\[\]\/]/.test(String(k)); }
 /* 명단이 바뀐 뒤 경량 미러를 즉시 갱신한다. 안 하면 교사가 앱을 다시 열 때까지 학생 기기 명단에
    삭제된 학생이 유령으로 남는다(신규 학생은 미러 미스 → 원본 폴백으로 구제되므로 문제 없다). */
+/* 명단(shopData.stu)이 바뀌면 그것으로 그려진 교사 화면을 전부 다시 그린다.
+   ⚠️ 한 곳만 부르면 안 된다 — 명단에 의존하는 표는 셋이다(학생관리·전체현황·학급회의 현황).
+   실제로 _refreshRoster 는 학생관리만, _dailyRosterRefresh 는 전체현황만 다시 그리고 있었다. */
+function _rerenderRosterViews(){
+  try{ loadStuManage(); }catch(_){}
+  try{ _scheduleOverviewRender(); }catch(_){}          // 안에서 _overviewMonth 로 가드된다
+  // 회의가 선택돼 있을 때만 — 없으면 "회의를 추가하면 현황이 표시됩니다" 안내를 빈 표로 덮는다.
+  try{ if(_clsViewMid) renderClassOverview(); }catch(_){}
+}
 async function _refreshRoster(){
-  try{ const {entries}=await _readRawStu(); _syncRoster(entries, true); }catch(_){}
+  // 여기서 이미 stu 전체를 읽는다 — shopData 까지 같이 갱신하고 그 시각을 캐시에 반영해,
+  //   바로 뒤 설정탭 진입이 같은 노드를 또 받지 않게 한다(_applyRawStu 가 _fullStuAt 을 찍는다).
+  const _seqAtStart=_stuMutSeq;
+  try{
+    const {entries}=await _readRawStu();
+    // 읽는 사이 또 고쳤으면(연속 삭제 등) 이 스냅샷은 낡았다 — 적용하면 지운 학생이 되살아난다.
+    //   뒤이은 _refreshRoster 가 최신으로 다시 맞춘다.
+    if(_seqAtStart!==_stuMutSeq) return;
+    _applyRawStu(entries);   // 안에서 화면까지 다시 그린다
+    _syncRoster(entries, true);
+  }catch(_){}
 }
 async function _addStudentKeyed(entries,migrated,nm,cd,no){
   // 추가할 Firebase 키 결정: cd키 모드면 cd, 레거시면 다음 정수 인덱스
@@ -4129,7 +4454,7 @@ async function _addStudentKeyed(entries,migrated,nm,cd,no){
   const upd = {
     ['stu/'+key+'/nm']        : nm,
     ['stu/'+key+'/cd']        : cd,
-    ['stu/'+key+'/updatedAt'] : Date.now(),
+    ['stu/'+key+'/updatedAt'] : _svNow(),
   };
   // 번호(no) — 입력칸/일괄입력에 있는데 예전엔 버려졌다. 상점·명단 정렬이 no 기준이라
   //   빠지면 신규 학생이 항상 맨 앞으로 온다.
@@ -4148,7 +4473,7 @@ async function addStudent(){
   if(entries.some(([_,v])=>v&&String(v.cd).trim()===cd)) return alert('이미 존재하는 코드입니다.');
   const _noVal=(document.getElementById('addStuNum').value||'').trim();
   await _addStudentKeyed(entries,migrated,nm,cd,_noVal);
-  shopData.stu=[...getStudentList(),{nm,cd,no:(Number(_noVal)||null)}];
+  shopData.stu=[...getStudentList(),{nm,cd,no:(Number(_noVal)||null)}]; _stuMutSeq++;
   document.getElementById('addStuNum').value='';
   document.getElementById('addStuName').value='';
   document.getElementById('addStuCode').value='';
@@ -4177,7 +4502,7 @@ async function bulkAddStudents(){
   if(toAdd.length===0){alert(`추가된 학생이 없습니다.\n중복 또는 형식 오류: ${skipped}건`);return;}
   for(const {nm,cd,no} of toAdd){ await _addStudentKeyed(entries,migrated,nm,cd,no); }
   // 서버엔 no 를 숫자로 저장하므로 로컬 배열도 같은 타입으로 맞춘다(addStudent 와 대칭).
-  shopData.stu=[...getStudentList(),...toAdd.map(t=>({nm:t.nm, cd:t.cd, no:(Number(t.no)||null)}))];
+  shopData.stu=[...getStudentList(),...toAdd.map(t=>({nm:t.nm, cd:t.cd, no:(Number(t.no)||null)}))]; _stuMutSeq++;
   document.getElementById('bulkStuInput').value='';
   loadStuManage();
   _refreshRoster();          // 학생 기기 명단에 즉시 반영
@@ -4201,7 +4526,10 @@ async function deleteStudent(idx){
   //   → stuDel/{cd} 툼스톤이 유일한 전파 수단. 없으면 삭제 시점에 꺼져 있던 기기가
   //   캐시에서 학생을 부활시키고 다음 저장 때 서버로 되쓴다. 미러(reqCnt/bankNotices/rank)도 함께 정리.
   if(found){
-    const now=Date.now();
+    // ⚠️ 서버 시각. 이 툼스톤 ts는 **이벤트 상점의 _delH가 `updatedAt > 툼스톤ts`로 비교**한다 =
+    //   기기 간 임계값. 이 기기 시계가 앞서면 미래 ts가 박혀 나중에 정당하게 재등록된 학생이
+    //   "옛날 것"으로 판정돼 지워지고, 뒤처지면 툼스톤이 무시돼 삭제한 학생이 되살아난다.
+    const now=_svNow();
     const upd={ ['stu/'+found[0]]:null, ['reqCnt/'+found[0]]:null };
     // cd 가 Firebase 경로에 못 쓰는 문자를 담고 있으면 multi-path update 전체가 throw 되어
     //   삭제 자체가 실패한다(기존 remove()엔 없던 실패 모드). 그럴 땐 cd 기반 키만 빼고 진행.
@@ -4209,6 +4537,10 @@ async function deleteStudent(idx){
       upd['stuDel/'+delCd]      = now;
       upd['bankNotices/'+delCd] = null;
       upd['rank/'+delCd]        = null;
+      // ⚠️ rankRev 를 함께 올려야 학생 기기의 랭킹 캐시가 무효화된다(이벤트 상점이 rev 게이트로
+      //   숫자 하나만 먼저 읽고 '안 바뀌면 본문을 안 받는' 구조라, 안 올리면 지운 학생이
+      //   학생 화면 랭킹에 계속 남는다). 상점의 삭제 경로 3곳은 전부 이걸 함께 올린다.
+      upd['rankRev']            = now;
       // 레거시(정수 인덱스) 키 모드에서는 상점 _forcePurgeStudent 와 같이 키형 툼스톤도 함께 남긴다.
       if(found[0]!==delCd && !_badPathKey(found[0])) upd['stuDel/'+found[0]] = now;
     } else {
@@ -4217,7 +4549,19 @@ async function deleteStudent(idx){
     await shopRef.update(upd);
   }
   else { console.warn('[deleteStudent] cd로 Firebase 키를 못 찾음:', target.cd); }
-  shopData.stu=stu.filter((_,i)=>i!==idx);
+  // 🧹 키오스크 경량 지갑 미러도 함께 지운다. shopRef 는 ClassData/EventShop 이라 위 multi-path 에
+  //   담을 수 없다(kiosk_wallet 은 DB 루트) — 별도 write.
+  //   ⚠️ 이게 없으면 키오스크 교사 화면이 열려야만 유령이 정리된다(그쪽 seedWalletHashOnce 경로).
+  //   이벤트 상점·자리 경매만 쓰는 날엔 미러가 비어 있지도 않아 학생 게이트도 통과하므로,
+  //   지운 학생이 키오스크 손님 목록에 계속 뜬다(결제는 shopAvail()==null 로 막히지만 표시가 남는다).
+  // ⚠️ found 여부와 **무관하게** 돈다. stu 노드를 못 찾는 경우가 바로 유령이 가장 잘 생기는
+  //   상황이다(다른 앱에서 이미 지웠는데 이 기기 명단엔 남아 있던 경우) — 위 if 안에 두면
+  //   정작 필요한 순간에 안 돈다. 실패해도 본 삭제를 막지 않는다(키오스크 쪽 정리가 백스톱).
+  if(!_badPathKey(delCd)){
+    try{ await _withTimeout(firebase.database().ref('kiosk_wallet/'+delCd).remove(),8000); }
+    catch(e){ console.warn('[deleteStudent] kiosk_wallet 정리 실패 — 키오스크 교사 화면이 나중에 정리한다', e); }
+  }
+  shopData.stu=stu.filter((_,i)=>i!==idx); _stuMutSeq++;
   loadStuManage();
   _refreshRoster();          // 학생 기기 명단에서 즉시 사라지도록
   toast('🗑️ 학생 삭제 완료');
@@ -4226,14 +4570,7 @@ async function deleteMonthData(){
   const month=document.getElementById('deleteMonthSel').value;
   if(!month) return;
   if(!confirm(`${month} 월의 모든 기록(records, nominations, dalgona)을 삭제할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
-  await Promise.all([
-    saengRef.child('records/'+month).remove(),
-  ]);
-  // nominations / dalgona는 month 필드 또는 key prefix로 매칭 (누락 방지)
-  const {noms:nomList,dals:dalList}=await _fetchMonthNomsAndDals(month);
-  const delNom=nomList.map(n=>saengRef.child('nominations/'+n.key).remove());
-  const delDal=dalList.map(d=>saengRef.child('dalgona/'+d.key).remove());
-  await Promise.all([...delNom,...delDal]);
+  // records/nominations/dalgona 삭제는 _purgeMonthData 한 곳에만 둔다(규칙이 갈라지지 않도록).
   await removeMonthFromFirebase(month);
   populateMonthSelectors(_monthsCache,['tMonthSel','tMonthSel5','deleteMonthSel']);
   detachOverviewListener();loadOverview();
@@ -4260,10 +4597,30 @@ async function importBackup(event){
   try{
     const text=await file.text();
     const data=JSON.parse(text);
+    // ⚠️ 검증 없이 set 하면 **다른 앱의 백업 파일 하나로** 생활기록부 노드가 통째로 날아간다.
+    //   같은 폴더의 여러 앱이 비슷한 이름(*_backup_*.json)을 내보내므로 오선택은 실제로 일어난다.
+    //   확인창은 파일명만 보여 줘서 방어가 되지 않는다 — 내용으로 판정한다.
+    const _sig=['records','months','month_status','classRecords','cm_list','nominations','dalgona','settings'];
+    if(!data||typeof data!=='object'||Array.isArray(data)||!_sig.some(k=>data[k]!==undefined)){
+      alert(`❌ 생활기록부 백업 파일이 아니에요.
+
+다른 앱의 백업이거나 손상된 파일 같아요.
+(월·기록·학급회의·설정이 하나도 들어 있지 않아요)`);
+      event.target.value='';return;
+    }
     if(!confirm(`⚠️ 현재 모든 생활기록부 데이터를 백업 파일로 덮어씁니다.\n파일: ${file.name}\n계속할까요?`)){
       event.target.value='';return;
     }
+    // roster 는 백업 대상이 아니라 **학생 기기의 부팅 관문**이다(이벤트 상점 명단의 경량 미러).
+    //   옛 백업으로 덮으면 지금 명단과 어긋나거나 아예 사라져, 학생 30대가 전부 '명단 없음'
+    //   화면에 걸려 로그인 자체를 못 한다. 백업 안의 값은 항상 낡았으므로 현재 값을 되돌린다.
+    let _roster=null;
+    try{ _roster=(await saengRef.child('roster').once('value')).val(); }catch(e){}
     await saengRef.set(data);
+    if(_roster!=null){
+      try{ await saengRef.child('roster').set(_roster); }catch(e){}
+      window._rosterHash=null;   // 해시 가드가 다음 동기화를 건너뛰지 않도록
+    }
     toast('✅ 불러오기 완료 — 새로고침합니다');
     setTimeout(()=>location.reload(),1200);
   }catch(e){
@@ -4402,25 +4759,28 @@ function toggleRankDetail(name,type){
 // ─── 배달하기 ───
 // 월별 nominations/dalgona 조회 (month 필드와 key prefix 둘 다 매칭 — 누락 방지)
 async function _fetchMonthNomsAndDals(month){
-  // 키 prefix({month}_)로 해당 월만 쿼리 → 트래픽 대폭 감소
+  /* 키 prefix({month}_)로 해당 월만 쿼리 → 트래픽 대폭 감소.
+     ⚠️ 단 prefix 쿼리는 **다른 달까지 가져온다** — 월 키는 "6" 과 "6_월" 이 공존할 수 있어
+     startAt('6_') 가 "6_월_a1_defender" 도 집는다. 이 결과는 순위표·발송모달뿐 아니라
+     **실제 발송(_doDeliveryInner)과 월 삭제(deleteMonthData)** 로 흘러가므로,
+     거르지 않으면 다른 달 항목을 학생 가방에 넣거나 함께 지운다. 정리 경로와 같은 규칙으로 거른다. */
   const [nomSnap,dalSnap]=await Promise.all([
     saengRef.child('nominations').orderByKey().startAt(month+'_').endAt(month+'_').once('value'),
     saengRef.child('dalgona').orderByKey().startAt(month+'_').endAt(month+'_').once('value')
   ]);
   const noms=[]; nomSnap.forEach(c=>{
     const v=c.val()||{};
-    noms.push({key:c.key,...v});
+    if(_isMonthRec(c.key,v,month)) noms.push({key:c.key,...v});
   });
   const dals=[]; dalSnap.forEach(c=>{
     const v=c.val()||{};
-    dals.push({key:c.key,...v});
+    if(_isMonthRec(c.key,v,month)) dals.push({key:c.key,...v});
   });
   return {noms,dals};
 }
 async function openTeacherMsgModal(){
   const month=document.getElementById('tMonthSel5')?.value||document.getElementById('tMonthSel')?.value||currentMonth;
-  const snap=await saengRef.child('records/'+month).once('value');
-  const records=snap.val()||{};
+  const records=await _readMonthRecords(month);
   const students=(shopData&&shopData.stu)||[];
   const items=[];
   students.filter(s=>s.nm).forEach(s=>{
@@ -4486,14 +4846,14 @@ async function sendSnackCoupons(){
       const found=stuEntries.find(([k,s])=>s&&String(s.cd||'').trim()===String(p.cd||'').trim());
       if(!found){ fail.push(p.name); continue; }
       const [key,s]=found;
-      const _surangItem={n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C',fromTeacherMsg:true,ts:Date.now()};
+      const _surangItem={n:surang.n,i:surang.i||'🍱',st:'active',g:surang.g||'C',fromTeacherMsg:true,ts:_svNow()};
       try{
         // 트랜잭션 append — 발송 중 학생 구매/사용을 덮어쓰지 않음
         await shopRoot.child('stu/'+key+'/inv').transaction(cur=>{const arr=_normInv(cur);arr.push(_surangItem);return arr;});
         // updatedAt 갱신 필수 — 이벤트 상점은 updatedAt으로 증분 동기화한다. 빠뜨리면 상점을 켜둔 학생의
         //   클라이언트가 inv 변경을 못 보고 캐시된 옛 inv를 계속 쓰다가, 다음 inv 쓰기에서 이 수라상을 날린다.
         //   (_doDeliveryInner는 이걸 하는데 여기만 빠져 있었다.)
-        try{ await shopRoot.child('stu/'+key+'/updatedAt').set(Date.now()); }catch(e){}
+        try{ await shopRoot.child('stu/'+key+'/updatedAt').set(_svNow()); }catch(e){}
         ok++;
         const chk=document.querySelector(`.msgPickChk[data-cd="${p.cd}"]`);
         if(chk){
@@ -4618,12 +4978,22 @@ window.deliverApprovedToShop=async function(month){
   // 기록이 승인된 학생들의 nomination/dalgona record가 없으면 생성하고 pending 항목 승격
   const recSnap=await saengRef.child('records/'+month).once('value');
   const recs=recSnap.val()||{};
+  // 학생마다 순차 await(bulkApproveMonth와 같은 모양) — 한 명에서 예외가 나면 여기서 멈추고
+  //   그 뒤 _doDelivery(실제 쿠키/달고나 발송)를 아예 못 불러 전체 발송이 조용히 안 되던 문제.
+  //   한 명 실패해도 나머지는 계속 진행하고, 실패 목록을 발송 전에 명시적으로 알린다.
+  const failed=[];
   for(const cd of Object.keys(recs)){
     if(recs[cd]?.status==='approved'){
-      await ensureNominationsAndDalgonaForRecord(cd,month,recs[cd]);
-      await autoApproveRelated(cd,month);
+      try{
+        await ensureNominationsAndDalgonaForRecord(cd,month,recs[cd]);
+        await autoApproveRelated(cd,month);
+      }catch(e){
+        console.error('[deliverApprovedToShop] 준비 실패',cd,e);
+        failed.push(getStudentName(cd)||cd);
+      }
     }
   }
+  if(failed.length) alert(`⚠️ ${failed.length}명은 발송 준비에 실패했어요: ${failed.join(', ')}\n(나머지 학생은 정상 발송을 진행합니다. 실패한 학생은 다시 눌러 재시도하세요.)`);
   return await _doDelivery({month,filterCd:null,allowReDeliver:false,silent:false});
 };
 
@@ -4647,7 +5017,8 @@ function _filterMonthInv(cur,val){
   const arr=_normInv(cur);
   return arr.map(it=>{
     if(!it||!Array.isArray(it.events)) return it;
-    const filtered=it.events.filter(ev=>{const k=ev&&(ev.nomKey||ev.dalKey)||'';return !(k&&k.startsWith(val+'_'));});
+    // ⚠️ 이벤트에는 month 필드가 없다 — 키로만 판단하므로 최장 일치가 유일한 방어다.
+    const filtered=it.events.filter(ev=>{const k=ev&&(ev.nomKey||ev.dalKey)||'';return !_keyBelongsToMonth(k,val,'prefix');});
     if(filtered.length===it.events.length) return it; // 이 달 이벤트 없음 — 손대지 않음
     // ⚠️ "이 달 이벤트로 events가 완전히 비워진" special 보상 아이템만 제거한다.
     //   이름/special만 보면 EventShop에서 직접 지급·구매한 마법사의 티켓(goldenTicket, 원래 events:[])까지
@@ -4709,8 +5080,8 @@ async function _acquireDeliverLock(){
     await ref.once('value'); // 캐시 프라이밍 (필수)
     const res=await ref.transaction(cur=>{
       const ts=_lockTs(cur);
-      if(ts && (Date.now()-ts) < 180000) return; // 다른 기기가 발송 중(3분 내) → abort
-      return {ts:Date.now(),token};
+      if(ts && (_svNow()-ts) < 180000) return; // 다른 기기가 발송 중(3분 내) → abort
+      return {ts:_svNow(),token};
     });
     return (res&&res.committed)?token:null;
   }catch(e){ console.error('[발송락] 획득 실패', e); return null; } // fail-closed
@@ -4725,7 +5096,7 @@ function _startDeliverHeartbeat(token){
       await ref.once('value'); // 프라이밍 — 없으면 cur=null로 읽혀 갱신이 조용히 abort된다
       await ref.transaction(cur=>{
         if(!cur||typeof cur!=='object'||cur.token!==token) return; // 내 락이 아님 → 그대로 둔다
-        return {ts:Date.now(),token};
+        return {ts:_svNow(),token};
       });
     }catch(e){}
   },60000);
@@ -4905,7 +5276,7 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
       _nomDebug.already++;
       // 재발송: 기존 event ts 갱신 → 학생 알림 다시 뜸
       const matched = byKey ? evList.find(ev=>ev&&ev.nomKey===n.key) : evList.find(ev=>ev&&!ev.nomKey&&ev.subtype===subtype);
-      if(matched) matched.ts = Date.now();
+      if(matched) matched.ts = _svNow();   // 학생 가방(이벤트 상점)에 들어가는 값 — 서버 시각
       if(matched) _pushOp(idx,{type:'event',special:'goldenTicket',template:_invTpl(it),dedupField:byKey?'nomKey':null,dedupVal:byKey?n.key:null,legacySubtype:byKey?null:subtype,event:matched});
       _mark('nominations/'+n.key);
       if(n.from) recipientCds.add(String(n.from).trim());
@@ -4914,7 +5285,7 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
       if(subtype==='defender') nT_def++; else nT_pro++;
       continue;
     }
-    const _nomEv={ts:Date.now(),nomKey:n.key,fromCd:'',fromName:'익명',reason:n.reason||'',subtype};
+    const _nomEv={ts:_svNow(),nomKey:n.key,fromCd:'',fromName:'익명',reason:n.reason||'',subtype};
     it.events.push(_nomEv);
     _pushOp(idx,{type:'event',special:'goldenTicket',template:_invTpl(it),dedupField:'nomKey',dedupVal:n.key,event:_nomEv});
     _mark('nominations/'+n.key);
@@ -4932,7 +5303,9 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     if(idx<0) continue;
     const inv=await getInv(idx);
     const it=ensureSpecial(inv,'dalgona');
-    const ts=Date.now();
+    // ⚠️ 학생 가방(이벤트 상점)에 저장되는 값이다 — 서버 시각이어야 상점 쪽 정렬·표시가 맞는다.
+    //   (필드명 없이 지역변수를 거쳐 저장되므로 '필드:Date.now()' 스윕에 안 걸렸다)
+    const ts=_svNow();
     // 재발송 dedup: 같은 dalKey가 events에 있으면 ts만 갱신 (인벤 중복 방지 + 학생 알림 다시 뜸)
     const evList = it.events||[];
     const existingDal = evList.find(ev=>ev&&ev.dalKey===d.key);
@@ -5048,7 +5421,9 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
     alert('⚠️ 다음 학생은 발송 중 잔액이 부족해져 쿠키가 차감되지 않았어요:\n' + _suFailed.join(', ') + '\n(아이템은 지급됐으니 잔액 확인 후 조정해 주세요)');
   }
   // ── 여기까지 왔으면 지급이 실제로 끝났다 → 이제서야 delivered 표시 ──
-  const deliveryTs=Date.now();
+  // ⚠️ student_viewed_at(학생 기기가 이벤트 상점에서 찍는다)과 **비교**되어 확인/미확인을 가른다.
+  //   교사 시계가 빠르면 이미 확인한 학생이 계속 '미확인'으로 남는다 → 서버 시각으로 찍는다.
+  const deliveryTs=_svNow();
   for(const {path,extra} of pendingMarks){
     await saengRef.child(path).update({delivered:true,delivered_at:deliveryTs,...(extra||{})});
   }
@@ -5061,7 +5436,7 @@ async function _doDeliveryInner({month,filterCd,allowReDeliver,silent}){
   }
   // updatedAt 갱신(맨 마지막) → 이벤트 상점 증분 리스너가 inv 변경을 수신
   for(const key of touchedKeys){
-    await shopRef.child('stu/'+key+'/updatedAt').set(Date.now());
+    await shopRef.child('stu/'+key+'/updatedAt').set(_svNow());
   }
   if(!silent) {
     document.getElementById('_deliverResultModal')?.remove();
@@ -5130,8 +5505,17 @@ let recordMode='personal';
 // 쿠키 선택은 최대 3개씩, 각각 {n:이름, stars:1~5, reason:이유}
 let clsBright=[],clsImprove=[];
 let clsLocked=false;
-let _clsSaveTimer=null,_clsCtx='',_clsPending=null;
+let _clsCtx='';
+let _clsDraftWarned=false;
 let _clsMyApproved=false;   // 내 응답이 승인됐는지(잠금 판단용)
+// 서버가 알려 준 내 응답의 현재 상태(''|draft|submitted|rejected|approved)
+let _clsMyStatus='';
+// 이 회의의 **서버 기록을 실제로 읽어 폼에 반영했는가**. "폼이 채워졌나"가 아니라 "서버로 맞췄나"다.
+//   ⚠️ 이게 false인 동안 폼을 풀면 안 된다 — clsResetForm이 비워 둔 빈 폼에 학생이 한 글자만 쳐도
+//   clsAutoSave가 전 필드 빈 스냅샷을 서버에 update해 지난 작성분이 통째로 사라진다
+//   (개인 기록의 _serverReconciled와 같은 역할·같은 이유).
+let _clsServerLoaded=false;
+let _clsSaving=false;   // 💾/제출 재진입 가드(개인 기록의 _savingDraft/_submitting과 같은 역할)
 let _clsRejReason='';       // 반려 사유(알림창에서 다시 보기)
 let _clsRejAt='';           // 반려 시각 — 같은 사유로 다시 반려해도 새 알림으로 잡기 위한 표식
 /* 배너 대신 쓰는 공용 알림창 — 제출/승인/마감을 예쁜 창으로 알린다 */
@@ -5145,12 +5529,36 @@ function showClsNotice(icon,title,msg,grad,shadow){
   document.getElementById('clsNoticeModal')?.classList.remove('hidden');
 }
 function closeClsNotice(){ document.getElementById('clsNoticeModal')?.classList.add('hidden'); }
+/* 월/회의를 바꾸면 붙어 있던 팝업(상태 알림·반려 알림·제출 오류·제출 확인)을 전부 닫는다.
+   ⚠️ 학생이 직접 눌러서 바꾸는 경우엔 애초에 이 모달들이 화면을 통째로 덮어(.rn-modal 은
+   position:fixed;inset:0) 다른 곳을 못 누르니 걱정 없다 — 진짜 위험은 _onVisibilityChanged
+   가 **원격으로**(선생님이 지금 보는 월/회의를 숨기는 순간) switchStudentMonth/switchMeeting
+   을 학생 조작 없이 부를 때다. Firebase 리스너는 화면 위에 뭐가 떠 있든 상관없이 그냥
+   발화하므로, 클릭을 막는 오버레이라는 사실이 이 경로에서는 전혀 방패가 안 된다.
+   안 닫으면 이미 떠난 기록의 팝업이 새 화면 위에 그대로 남아, 확인 버튼을 눌러도
+   "지금 보고 있는" 것과 다른 기록을 확인·제출 처리해 버린다.
+   ⚠️ 반려 알림은 classList 만 닫는다 — confirmRejectionNotice/closeClsRejectNotice 를
+   부르지 않으므로 '확인함' 표식은 안 남는다(그 기록으로 돌아오면 다시 정상적으로 뜬다).
+   ⚠️ 제출 확인은 반드시 closeSubmitConfirmModal() 을 통해 닫는다 — 그래야 대기 중이던
+   콜백(_scOnOk, 어느 기록을 제출할지 담고 있다)도 함께 비워져 엉뚱한 기록이 제출되지 않는다. */
+function _closeAllNoticeModals(){
+  document.getElementById('clsNoticeModal')?.classList.add('hidden');
+  document.getElementById('clsRejectNoticeModal')?.classList.add('hidden');
+  document.getElementById('rejectionNoticeModal')?.classList.add('hidden');
+  document.getElementById('submitErrorModal')?.classList.add('hidden');
+  closeSubmitConfirmModal();
+}
 const _clsClosedSeen=new Set();   // 마감 안내는 회의당 한 번만
 // 반려 알림창 — 새 사유는 회의 탭을 열 때 자동으로 한 번 뜨고, 배너를 눌러 다시 볼 수 있다.
 function showClsRejectNotice(){
   if(!_clsRejReason) return;
+  /* ⚠️ _clsRejReason 은 두 가지 역할을 겸한다 — "반려 상태인지"를 알리는 참/거짓 플래그이자
+     (사유가 없어도 '(사유 없음)' 으로 채워 항상 참이 되게 해 뒀다. 그래야 위 이른 return 이
+     반려 자체를 놓치지 않는다) 동시에 화면에 보여줄 문구다. 여기 렌더링 시점에서만
+     그 placeholder 문구를 걸러내 — 진짜 사유가 없으면 노란 상자를 통째로 숨긴다. */
+  const hasReason=_clsRejReason&&_clsRejReason!=='(사유 없음)';
   const el=document.getElementById('clsRejectNoticeMsg');
-  if(el) el.textContent=_clsRejReason;
+  if(el){ el.textContent=hasReason?_clsRejReason:''; el.classList.toggle('hidden',!hasReason); }
   document.getElementById('clsRejectNoticeModal')?.classList.remove('hidden');
 }
 function closeClsRejectNotice(){
@@ -5237,7 +5645,7 @@ async function loadMeetings(){
   const missing=[];
   l.forEach(c=>{if(!_cmOrder[c.key]) missing.push(c.key);});
   if(missing.length){
-    const base=Date.now()-missing.length*1000, up={};
+    const base=_svNow()-missing.length*1000, up={};
     missing.forEach((k,i)=>{const t=base+i*1000;up[k]=t;_cmOrder[k]=t;});
     await saengRef.child('cm_order').update(up);
   }
@@ -5259,7 +5667,7 @@ async function addClassMeeting(){
   const id='c'+Date.now().toString(36);
   await saengRef.child('cm_list/'+id).set(label);
   await saengRef.child('cm_order/'+id).set(Date.now());
-  await saengRef.child('cm_status/'+id).set({status:'active',opened_at:Date.now()});
+  await saengRef.child('cm_status/'+id).set({status:'active',opened_at:_svNow()});
   _cmList[id]=label; _cmOrder[id]=Date.now(); _cmStatus[id]={status:'active'};
   populateCmSelector();
   const sel=document.getElementById('tCmSel'); if(sel) sel.value=id;
@@ -5288,7 +5696,7 @@ async function toggleMeetingStatus(id){
   const active=_cmIsActive(id);
   const next=active?'closed':'active';
   await saengRef.child('cm_status/'+id).update(
-    next==='active'?{status:'active',opened_at:Date.now()}:{status:'closed',closed_at:Date.now()});
+    next==='active'?{status:'active',opened_at:_svNow()}:{status:'closed',closed_at:_svNow()});
   _cmStatus[id]={...(_cmStatus[id]||{}),status:next};
   renderCmManageList();
   toast(next==='active'?'▶️ 회의 진행 — 학생이 쓸 수 있어요':'⏹️ 회의 마감 — 학생은 읽기만 가능');
@@ -5310,7 +5718,9 @@ async function deleteMeeting(id){
 async function bulkApproveMeeting(id){
   const snap=await saengRef.child('classRecords/'+id).once('value');
   const recs=snap.val()||{};
-  const targets=Object.keys(recs).filter(cd=>recs[cd]&&recs[cd].status!=='approved');
+  // 반려된 기록은 대상에서 뺀다 — 아니면 일괄승인이 교사가 방금 반려한 응답을 조용히 승인해버린다
+  //   (개인 생활기록부 bulkApproveMonth와 동일 문제, 여기서도 함께 수정).
+  const targets=Object.keys(recs).filter(cd=>recs[cd]&&recs[cd].status!=='approved'&&recs[cd].status!=='rejected');
   if(!targets.length) return alert('승인할 기록이 없습니다.\n(제출된 기록이 없거나 이미 모두 승인됨)');
   // 아직 제출하지 않은(작성 중) 학생까지 승인하면 그 학생은 더 못 고친다.
   //   몇 명이 그런 상태인지 반드시 알리고 확인받는다.
@@ -5320,20 +5730,31 @@ async function bulkApproveMeeting(id){
       +`\n\n승인하면 학생은 수정할 수 없게 됩니다.`)) return;
   const up={};
   targets.forEach(cd=>{ up[cd+'/status']='approved'; up[cd+'/rejected_reason']=''; up[cd+'/approved_at']=Date.now(); });
-  await saengRef.child('classRecords/'+id).update(up);
+  try{
+    await saengRef.child('classRecords/'+id).update(up);
+  }catch(e){
+    // 한 번의 멀티패스 update라 "절반만 승인"은 안 나지만, 실패하면 그대로 던져 무통보로 끝나던 문제.
+    console.error('[bulkApproveMeeting] 실패',e);
+    alert('⚠️ 일괄 승인에 실패했어요. 인터넷 연결을 확인하고 다시 눌러주세요.');
+    return;
+  }
   toast(`✅ ${targets.length}명 일괄 승인 완료`);
   if(id===_clsViewMid) targets.forEach(cd=>_clsPatchLocal(cd,{status:'approved',rejected_reason:''}));
   loadClassOverview(false,1);
 }
 function populateCmSelector(){
-  const sel=document.getElementById('tCmSel');
-  if(!sel) return;
-  const keep=sel.value;
   const entries=sortedMeetings();
-  sel.innerHTML=entries.length?entries.map(([id,label])=>
+  const optHtml=entries.length?entries.map(([id,label])=>
     `<option value="${_clsEsc(id)}">${_clsEsc(label)}${_cmIsActive(id)?'':' (마감)'}${_cmHidden[id]?' 🙈':''}</option>`).join('')
     :'<option value="">회의 없음</option>';
-  if(keep&&_cmList[keep]) sel.value=keep;
+  // tCmSel(학급회의 탭)과 tCmSelR(학급회의 결과 탭)은 같은 회의 목록·같은 선택을 공유한다.
+  ['tCmSel','tCmSelR'].forEach(id=>{
+    const sel=document.getElementById(id);
+    if(!sel) return;
+    const keep=sel.value;
+    sel.innerHTML=optHtml;
+    if(keep&&_cmList[keep]) sel.value=keep;
+  });
 }
 async function renderCmManageList(){
   const wrap=document.getElementById('cmManageList');
@@ -5364,7 +5785,7 @@ async function onCmDrop(e,targetId){
   const from=ids.indexOf(_dragCm), to=ids.indexOf(targetId);
   if(from<0||to<0) return;
   ids.splice(from,1); ids.splice(to,0,_dragCm);
-  const base=Date.now()-ids.length*1000, up={};
+  const base=_svNow()-ids.length*1000, up={};
   ids.forEach((k,i)=>{const t=base+i*1000;up[k]=t;_cmOrder[k]=t;});
   await saengRef.child('cm_order').update(up);
   _dragCm=null; // 드롭 후 반드시 비운다 (월 목록의 onMonthDragEnd는 _dragMonth만 지운다)
@@ -5396,21 +5817,29 @@ function toggleCookie(type,name,el){
   const list=_pickList(type);
   const cur=list.find(p=>p.n===name);
   if(clsLocked){
-    if(cur) openPickModal(type,name,true); else showCookieInfoPopup(name,el);
+    if(cur){ openPickModal(type,name,true); return; }
+    /* ⚠️ 여기서 설명 팝업만 띄우면, 교사가 설명을 안 적은 쿠키는 **아무 반응이 없다**
+       (실사용에서 "쿠키 클릭 안 됨"으로 신고됐다). 왜 못 고르는지 반드시 알려 준다. */
+    if(!showCookieInfoPopup(name,el)){
+      toast(_cmIsActive(cmCurrent) ? '지금은 읽기만 할 수 있어요' : '마감된 회의예요 — 읽기만 할 수 있어요');
+    }
     return;
   }
   if(!cur && list.length>=CLS_PICK_MAX){
-    showCookieInfoPopup(name,el);
+    // 안내를 **먼저** — 팝업 쪽에서 예외가 나면 토스트까지 같이 죽어 클릭이 무반응이 된다.
     toast(`쿠키는 ${CLS_PICK_MAX}개까지 고를 수 있어요 — 먼저 고른 쿠키를 지우고 다시 골라 주세요`);
+    try{ showCookieInfoPopup(name,el); }catch(e){}
     return;
   }
   openPickModal(type,name,false);
 }
 // 보석(showGemInfoPopup)과 같은 말풍선 — 선택을 풀 때도 설명은 그대로 띄운다
 let _cookieInfoTimer=null;
+/* 보여줬으면 true. 호출부가 "아무것도 안 뜬 경우"를 알고 대신 안내할 수 있어야 한다 —
+   교사가 쿠키 설명을 안 적었으면 def 가 비어 조용히 return 하고, 그러면 클릭이 **완전 무반응**이 된다. */
 function showCookieInfoPopup(name,el){
   const def=_cookieDesc(name);
-  if(!def||!el) return;
+  if(!def||!el) return false;
   document.getElementById('cookieInfoPopup')?.remove();
   clearTimeout(_cookieInfoTimer);
   const popup=document.createElement('div');
@@ -5426,6 +5855,7 @@ function showCookieInfoPopup(name,el){
   if(top<8) top=8;
   popup.style.left=left+'px'; popup.style.top=top+'px';
   _cookieInfoTimer=setTimeout(()=>{popup.parentNode&&popup.remove();},4000);
+  return true;
 }
 /* ─────────── 쿠키 선택(3개) + 별점·이유 ─────────── */
 const CLS_PICK_MAX=3;
@@ -5471,9 +5901,52 @@ function _paintCookieSel(){
 }
 
 let _pickCtx=null; // {type,name,readonly}
+let _pickDraftWarned=false; // 쿼터초과 안내 1회 제한(매 입력마다 스팸 방지)
 function openPickAt(type,i){
   const p=_pickList(type)[i];
   if(p) openPickModal(type,p.n,clsLocked);
+}
+/* ── 작성 중인 쿠키 보존 ──
+   '확인' 을 누르기 전 내용(어느 쿠키·별점·이유)은 어디에도 없어서, 새로고침이나 앱 종료로 통째 날아갔다.
+   입력할 때마다 로컬에 남기고, 회의를 다시 열면 그 모달을 그대로 되살린다.
+   ⚠️ 회의·학생별로 키를 나눈다(다른 회의의 작성분이 딸려오면 안 된다). */
+const _pickDraftKey=()=>(me&&cmCurrent)?('sw_pickdraft_'+me.cd+'_'+cmCurrent):'';
+function _savePickDraft(){
+  const k=_pickDraftKey();
+  if(!k||!_pickCtx||_pickCtx.readonly) return;
+  try{
+    const ta=document.getElementById('pickReason');
+    localStorage.setItem(k,JSON.stringify({type:_pickCtx.type,name:_pickCtx.name,
+      stars:_pickStars||0,reason:ta?ta.value:''}));
+    _pickDraftWarned=false;
+  }catch(e){
+    // 쿼터 초과 — 학급회의 자동저장(_clsDraftWarned)과 같은 규칙: 1회만 안내(매 입력마다 스팸 방지).
+    //   여긴 '확인'을 누르기 전 임시 보관분이라, 안내 없이 조용히 실패하면 쓰던 이유가
+    //   아무 경고도 없이 새로고침 한 번에 사라진다.
+    if(!_pickDraftWarned){ _pickDraftWarned=true; try{ toast('⚠️ 저장공간이 가득 차 글이 백업되지 않아요 — 저장 공간을 비워 주세요'); }catch(_){} }
+  }
+}
+function _clearPickDraft(){
+  const k=_pickDraftKey();
+  if(k) try{ localStorage.removeItem(k); }catch(e){}
+}
+/* 회의를 열 때 호출 — 쓰다 만 쿠키가 있으면 그 창을 되살린다.
+   ⚠️ 잠긴 회의에선 되살리지 않는다(고칠 수 없는데 창만 뜨면 혼란스럽다). */
+function _restorePickDraft(){
+  /* ⚠️ 학급회의 화면을 **보고 있을 때만** 되살린다.
+     clsLoadMyRecord 는 학생이 개인 기록 탭에 있어도 로그인 때 한 번 돈다(승인/반려 알림을 받으려고).
+     그때 되살리면 개인 기록을 쓰는데 쿠키 창이 갑자기 덮는다. */
+  if(recordMode!=='class') return;
+  const k=_pickDraftKey();
+  if(!k||clsLocked) return;
+  let d=null;
+  try{ const raw=localStorage.getItem(k); if(raw) d=JSON.parse(raw); }catch(e){}
+  if(!d||!d.name) return;
+  openPickModal(d.type,d.name,false);
+  _pickSetStars(d.stars||0,false);        // 복원 중 — 이유를 채우기 전이라 지금 저장하면 안 된다
+  const ta=document.getElementById('pickReason');
+  if(ta){ ta.value=d.reason||''; _pickCount(); }
+  toast('✏️ 쓰던 쿠키를 이어서 쓸 수 있어요');
 }
 function openPickModal(type,name,readonly){
   const cur=_pickList(type).find(p=>p.n===name);
@@ -5484,7 +5957,7 @@ function openPickModal(type,name,readonly){
   document.getElementById('pickStarLabel').textContent=(type==='bright')
     ? '우리 반은 이 쿠키를 얼마나 잘 하고 있나요?'
     : '우리 반은 이 쿠키를 얼마나 더 노력해야 하나요?';
-  _pickSetStars(cur?cur.stars:0);
+  _pickSetStars(cur?cur.stars:0,false);   // 초기화일 뿐 사용자가 고른 게 아니다 — 저장 안 함
   const ta=document.getElementById('pickReason');
   ta.value=cur?(cur.reason||''):'';
   ta.disabled=_pickCtx.readonly;
@@ -5497,14 +5970,21 @@ function openPickModal(type,name,readonly){
 function closePickModal(){
   document.getElementById('pickModal').classList.add('hidden');
   _pickCtx=null;
+  _clearPickDraft();   // 닫았으면 '쓰던 것'이 아니다 — 다음에 또 뜨면 안 된다
 }
 let _pickStars=0;
-function _pickSetStars(n){
+/* save=false 는 "화면을 이 상태로 맞춘다"만 하고 로컬 임시보관에는 손대지 않는다.
+   openPickModal/_restorePickDraft 가 모달을 초기화할 때 쓴다 — 그 시점엔 textarea 의 이유가
+   아직 옛 값(직전 쿠키의 잔상) 그대로라, 여기서 저장까지 같이 해버리면 방금 읽어 온
+   진짜 임시보관 내용을 빈 값으로 덮어써 버린다(실사용에서 실제로 이렇게 지워졌다).
+   진짜 사용자 조작(별점 클릭)만 기본값 true 로 저장까지 한다. */
+function _pickSetStars(n,save=true){
   _pickStars=Math.max(0,Math.min(5,Number(n)||0));
   const wrap=document.getElementById('pickStars');
   const flame=_isFlame(_pickCtx&&_pickCtx.type);
   wrap.innerHTML=[1,2,3,4,5].map(i=>`<span class="pick-star${flame?' flame':''}${i<=_pickStars?' on':''}" onclick="${_pickCtx&&_pickCtx.readonly?'':`_pickSetStars(${i})`}">${flame?'🔥':'★'}</span>`).join('');
   document.getElementById('pickStarWord').textContent=_pickStars?(flame?FLAME_WORDS:STAR_WORDS)[_pickStars]:(flame?'불꽃을 눌러 주세요':'별을 눌러 주세요');
+  if(save) _savePickDraft();
 }
 function _pickCount(){
   const ta=document.getElementById('pickReason');
@@ -5551,10 +6031,29 @@ function removePick(type,i){
 
 /* ─────────── 학생: 모드·회의 탭 ─────────── */
 // 화면 전환만 담당한다(제목·표시). 어떤 회의/월을 볼지는 상단 탭이 정한다.
+/* 마지막으로 보던 탭을 이 태블릿에 기억한다(학생별).
+   새로고침·재접속 때 그 화면으로 돌아온다 — 쓰던 곳이 아니라 늘 개인 기록으로 튕기면
+   학급회의를 쓰던 학생은 매번 다시 찾아 들어가야 한다.
+   ⚠️ 어느 달/회의를 보고 있었는지도 함께 남긴다(탭만 기억하면 엉뚱한 회의가 열린다). */
+const _lastTabKey=()=>me?('sw_lasttab_'+me.cd):'';
+function _saveLastTab(){
+  const k=_lastTabKey();
+  if(!k) return;
+  try{ localStorage.setItem(k,JSON.stringify({mode:recordMode,
+    month:currentMonth||'', mid:cmCurrent||''})); }catch(e){}
+}
+function _readLastTab(){
+  const k=_lastTabKey();
+  if(!k) return null;
+  try{ const raw=localStorage.getItem(k); return raw?JSON.parse(raw):null; }catch(e){ return null; }
+}
 function setRecordMode(mode){
   recordMode=mode;
+  _saveLastTab();
   document.getElementById('personalFormArea').classList.toggle('hidden',mode!=='personal');
   document.getElementById('classFormArea').classList.toggle('hidden',mode!=='class');
+  const topT=document.getElementById('stuTopTitle');
+  if(topT) topT.textContent=(mode==='class')?'🏛️ 학급회의':'📖 생활기록부';
   const t=document.getElementById('stuRecordTitle');
   if(!t) return;
   t.textContent=(mode==='class')
@@ -5589,7 +6088,7 @@ function buildCmTabs(){
 }
 function switchMeeting(id){
   if(id===cmCurrent&&recordMode==='class') return;
-  _clsFlush();                 // 이전 회의의 대기 저장 확정
+  _closeAllNoticeModals();   // 다른 회의로 옮기면서 이전 회의 알림창을 화면에 남기지 않는다
   cmCurrent=id;
   setRecordMode('class');
   buildCmTabs();
@@ -5611,7 +6110,7 @@ function clsCollect(status){
     good:g('clsGood'), bad:g('clsBad'), wish:g('clsWish'),
     status:status||'draft',
     student_name:me?me.nm:'', student_no:(me&&me.no!=null)?me.no:null,
-    updated_at:Date.now()
+    updated_at:_svNow()   // 로컬 draft 와 비교되는 값 — 반드시 서버 시각(clsLoadMyRecord 의 dTs>sTs)
   };
 }
 // 저장된 값 → 선택 배열. picks_*가 없으면 예전 단일 선택 형식(bright/bright_reason)을 승격시킨다.
@@ -5635,6 +6134,9 @@ function clsFill(d){
   _paintCookieSel();
   const st=d.status||'';
   _clsRejReason=(st==='rejected')?(d.rejected_reason||'(사유 없음)'):'';   // 배너 없음 — 알림창이 맡는다
+  // 회의를 바꾸면 이전 회의의 라벨("제출됨" 등)이 다음 회의 로딩 전까지 잠깐 남아 있으면 안 된다 —
+  //   개인 생활기록부의 resetForm과 같은 이유. _clsApplyStatus(리스너)가 도착하면 다시 정확히 그린다.
+  { const _csb=document.getElementById('clsSubmitBtn'); if(_csb) _csb.textContent=(st==='submitted'||st==='approved')?'✅ 제출됨':'📮 제출하기'; }
 }
 function clsResetForm(){ clsFill({}); }
 function clsSetLocked(locked){
@@ -5642,43 +6144,160 @@ function clsSetLocked(locked){
   ['clsGood','clsBad','clsWish'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.disabled=locked;
   });
+  // 저장이 진행 중이면 계속 비활성. 안 그러면 15초 저장 대기 중 _clsSyncLock(선생님이 회의 이름·
+  //   순서를 바꾸기만 해도 발화)이 버튼을 되살려 학생이 다시 누른다 — _clsSaving이 막아 주지만
+  //   그때는 아무 반응 없이 무시돼(return false) "눌리지 않는 버튼"으로 보인다.
   ['clsSaveBtn','clsSubmitBtn'].forEach(id=>{
-    const el=document.getElementById(id); if(el) el.disabled=locked;
+    const el=document.getElementById(id); if(el) el.disabled=locked||_clsSaving;
   });
   _paintCookieSel(); // 잠금 상태에 따라 ✕ 버튼 표시가 달라진다
+}
+/* 서버 값을 늦게(재연결) 받았을 때의 화해. 학생이 이미 채운 칸은 절대 건드리지 않고,
+   아직 기본값 그대로인 칸만 서버 값으로 메운다 — fillForm의 _put/_preserve와 같은 규칙이다. */
+function _clsReconcile(v){
+  v=v||{};
+  if(!clsBright.length)  clsBright=_normPicks(v.picks_bright, v.bright, v.bright_reason);
+  if(!clsImprove.length) clsImprove=_normPicks(v.picks_improve, v.improve, v.improve_reason);
+  [['clsGood','good'],['clsBad','bad'],['clsWish','wish']].forEach(([id,k])=>{
+    const el=document.getElementById(id);
+    if(el&&!el.value){ el.value=v[k]||''; countChars(el); }
+  });
+  // ⚠️ 짝인 _clsMyStatus 도 같이 갱신한다 — 재연결 화해(_clsResyncOnReconnect)는 여기만 지나고
+  //   _clsApplyStatus 를 안 거치므로, 빠뜨리면 그 창에서 누른 💾가 서버의 제출 상태를 draft 로 내린다.
+  _clsMyStatus=v.status||'';
+  _clsMyApproved=(v.status==='approved');
+  _paintCookieSel();
+  // 라벨도 같이 갱신 — _clsResyncOnReconnect 경로는 _clsApplyStatus를 안 거치므로 여기서 안 하면
+  //   재연결 후 "제출됨"이어야 할 게 계속 "제출하기"로 남는다(위 _clsMyStatus 주석과 같은 이유).
+  { const _csb=document.getElementById('clsSubmitBtn'); if(_csb) _csb.textContent=(v.status==='submitted'||v.status==='approved')?'✅ 제출됨':'📮 제출하기'; }
+}
+/* 재연결되면 서버 값을 한 번 다시 읽어 화해한다. **폼은 리셋하지 않는다**(작성 중 글 보존).
+   리스너만 믿으면 안 되는 경우가 있다 — 내 오프라인 쓰기로 로컬 캐시와 서버가 같아지면
+   재연결 시 value가 다시 안 뛰어 _clsServerLoaded가 영영 false로 남고, 그러면
+   _clsSyncLock이 폼을 다시 열어 주지 못한다(선생님이 마감→재개해도 학생은 읽기전용). */
+let _clsResyncing=false;
+function _clsResyncOnReconnect(){
+  if(_clsServerLoaded||_clsResyncing||!_fbOnline||!me||isTeacher||!cmCurrent) return;
+  _clsResyncing=true;
+  const mid=cmCurrent, cd=me.cd;
+  _withTimeout(_clsRef(mid,cd).once('value'),8000).then(s=>{
+    // 늦게 도착 — 신원 확인. ⚠️ _fbOnline 재확인 필수: 재연결 직후 이 once를 띄웠어도 8초 안에
+    //   다시 끊기면 캐시(=내 오프라인 쓰기)에서 resolve될 수 있다. 그때 화해로 치면 원래 구멍 그대로다.
+    if(_clsServerLoaded||!_fbOnline||!me||me.cd!==cd||cmCurrent!==mid) return;
+    _clsServerLoaded=true;
+    _clsReconcile(s.val()||{});
+    _clsSyncLock();
+  }).catch(()=>{}).then(()=>{ _clsResyncing=false; });
+}
+/* 서버 기록을 아직 못 읽은 상태(_clsServerLoaded=false)의 쓰기에서 **비어 있는 필드를 뺀다.**
+   clsCollect는 폼 전체 스냅샷이라, 서버에 내용이 있는데 이 기기가 그걸 못 읽었으면
+   빈 칸들이 그대로 서버를 덮는다. 확인 전까지는 "쓴 것만 보낸다"가 안전한 방향이다
+   (의도적 삭제는 그동안 반영되지 않지만, 전체 소실보다 낫다 — _mergeDraftOverServer와 같은 판단). */
+function _clsStripUnverified(d){
+  const out={...d};
+  if(!(out.picks_bright&&out.picks_bright.length)){ delete out.picks_bright; delete out.bright; delete out.bright_reason; }
+  if(!(out.picks_improve&&out.picks_improve.length)){ delete out.picks_improve; delete out.improve; delete out.improve_reason; }
+  ['good','bad','wish'].forEach(k=>{ if(!out[k]) delete out[k]; });
+  return out;
+}
+
+/* _clsPushIfDirty 는 2026-09-04 제거했다 — 마감·로그아웃 때 작성 중 글을 서버로 밀어내던 함수다.
+   이제 서버 쓰기는 **제출 때만** 하므로 이 통로가 있으면 정책이 깨진다.
+   작성 중 글은 로컬(localStorage)에만 남고, 학생이 제출해야 선생님께 간다. */
+
+/* 로컬 draft 를 서버 기록 위에 덮되, draft 가 "온전한 스냅샷"이 아니면(full!==true)
+   빈 필드는 서버를 덮지 않는다 — 개인 기록의 _mergeDraftOverServer 와 같은 규칙.
+   ⚠️ 이게 없으면: 서버를 못 읽은 기기(오프라인 로드·태블릿 교체)에서 한 글자만 쳐도
+   clsCollect 의 **전 필드 빈 스냅샷**이 draft 로 남고, 다음 로드의 통째 병합이 그걸
+   서버 위에 얹어 지난 회의 작성분을 화면에서 지운다 → 그 상태로 💾 하면 서버도 빈다.
+   status 계열은 언제나 서버가 정본이다(로컬 draft 는 애초에 status 를 담지 않는다). */
+function _clsMergeDraftOverServer(server,draft){
+  const d=server||{};
+  const keep=x=>({...x, status:d.status, submitted_at:d.submitted_at, rejected_reason:d.rejected_reason, rejected_at:d.rejected_at});
+  if(draft.full===true) return keep({...d,...draft});
+  const out={...d};
+  ['good','bad','wish','bright','bright_reason','improve','improve_reason','student_name'].forEach(k=>{
+    const v=draft[k]; if(v!=null&&v!=='') out[k]=v;
+  });
+  if(Array.isArray(draft.picks_bright)&&draft.picks_bright.length) out.picks_bright=draft.picks_bright;
+  if(Array.isArray(draft.picks_improve)&&draft.picks_improve.length) out.picks_improve=draft.picks_improve;
+  if(draft.student_no!=null) out.student_no=draft.student_no;
+  if(draft.updated_at!=null) out.updated_at=draft.updated_at;
+  return keep(out);
 }
 
 /* ─────────── 학생: 로드 ─────────── */
 async function clsLoadMyRecord(){
   if(!me) return;
   _detachMyClsRecord();   // 이전 회의의 상태 리스너 정리
-  if(!cmCurrent){ clsResetForm(); clsSetLocked(true); return; }
+  if(!cmCurrent){ _clsServerLoaded=false; clsResetForm(); clsSetLocked(true); return; }
   const mid=cmCurrent, ctx=mid+'/'+me.cd;
   _clsCtx=ctx;
+  _clsServerLoaded=false;
+  _clsLastSrvTs=0;   // 회의가 바뀌면 기준도 새로 잡는다(옛 회의 값이 새 회의 draft 를 부풀리지 않도록)
+  _clsMyStatus='';
   clsResetForm();
   clsSetLocked(true);        // 확인 전까지는 잠금 (개인 기록과 같은 정책)
-  let server=null;
-  try{ server=(await _clsRef(mid,me.cd).once('value')).val(); }catch(e){}
-  if(_clsCtx!==ctx) return;  // 로딩 중 회의/학생이 바뀌면 폐기
-  // 로컬 draft가 서버보다 새로우면 로컬 우선 (탭 종료·오프라인 대비)
+  // 로컬 draft는 서버와 무관하게 먼저 꺼내 둔다 — 서버를 못 읽어도 학생이 자기 글은 봐야 한다.
   let draft=null;
   try{ const raw=localStorage.getItem(_clsDraftKey(mid,me.cd)); if(raw) draft=JSON.parse(raw); }catch(e){}
-  const sTs=Number(server&&server.updated_at)||0, dTs=Number(draft&&draft.updated_at)||0;
-  clsFill((dTs>sTs)?{...(server||{}),...draft}:(server||{}));
+  // ⚠️ 생 await 금지: RTDB once('value')는 오프라인(캐시에 없는 첫 로드)이면 resolve도 reject도
+  //   하지 않는다 → catch도 안 걸리고 아래 clsSetLocked(해제)까지 영영 못 와서, 학생이 학급회의를
+  //   **아예 못 쓰게** 된다. 개인 기록에서 "확인되기 전까지 잠금"을 뺀 것과 정확히 같은 이유다.
+  //   타임아웃은 취소가 아니라 "기다리기를 그만둔다" — 못 읽었으면 아래 fail-open으로 연다.
+  let server=null, _ok=false;
+  try{ server=(await _withTimeout(_clsRef(mid,me.cd).once('value'),8000)).val(); _ok=true; }catch(e){}
+  if(_clsCtx!==ctx) return;  // 로딩 중 회의/학생이 바뀌면 폐기
   const closed=!_cmIsActive(mid);
-  const approved=(server&&server.status)==='approved';
-  _clsMyApproved=approved;   // 마감/재개 실시간 반영(_clsSyncLock)이 승인 잠금을 풀지 않도록
-  clsSetLocked(closed||approved);
-  // 마감된 회의는 배너 대신 알림창으로 한 번만 알린다(탭을 보고 있을 때만)
+  // 마감 안내는 서버 읽기 성공 여부와 무관하다(회의 상태는 cm_status에서 이미 안다).
+  //   fail-open 경로에서도 띄워야 "왜 안 써지지?"가 안 생긴다.
   if(closed&&recordMode==='class'&&!_clsClosedSeen.has(mid)){
     _clsClosedSeen.add(mid);
     showClsNotice('📖','마감된 회의예요','읽기만 할 수 있어요.\n선생님이 다시 열면 고칠 수 있어요.',
       'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
   }
+  if(!_ok){
+    // 서버 확인 실패(오프라인/반쯤 끊긴 AP). 폼을 잠근 채 두면 못 쓰므로 열되,
+    //   _clsServerLoaded는 false로 남겨 둔다 → 서버 쓰기는 _clsStripUnverified가
+    //   빈 필드를 빼고 보내 기존 기록을 덮지 않는다. 리스너가 값을 받는 순간 화해된다.
+    if(draft) clsFill(draft);
+    _clsMyApproved=false;
+    clsSetLocked(closed);
+    toast('⚠️ 연결이 느려 저장된 내용을 못 불러왔어요 — 쓴 내용은 저장돼요');
+    _listenMyClsRecord(mid,me.cd);
+    return;
+  }
+  // 로컬 draft가 서버보다 새로우면 로컬 우선 (탭 종료·오프라인 대비).
+  //   ⚠️ 단 승인된 기록은 서버가 정본이다 — 승인 순간 취소된 대기 저장분이 로컬 draft로 남아 있어,
+  //   그대로 병합하면 학생이 잠긴 폼에서 "선생님이 승인한 것과 다른 글"을 보게 된다.
+  //   draft는 지우지 않고 무시만 한다(승인 취소되면 다시 살아나야 하므로).
+  //   개인 기록 리스너의 remoteLocked=(d.status==='approved'||d.status==='submitted')와 같은 규칙.
+  const approved=(server&&server.status)==='approved';
+  const sTs=Number(server&&server.updated_at)||0, dTs=Number(draft&&draft.updated_at)||0;
+  if(sTs>_clsLastSrvTs) _clsLastSrvTs=sTs;
+  // 2026-09-05 정책 변경: 제출(submitted)도 승인과 같이 서버가 정본 — 폼이 잠겨 있는데
+  //   화면엔 옛 로컬 draft 글이 보이면 혼란스럽다(개인 기록의 remoteLocked와 동일 규칙).
+  const _submitted=(server&&server.status)==='submitted';
+  const _useDraft=(dTs>sTs&&!approved&&!_submitted);
+  clsFill(_useDraft?_clsMergeDraftOverServer(server,draft):(server||{}));
+  _clsMyStatus=(server&&server.status)||'';   // 리스너 첫 콜백 전에 눌린 💾도 상태를 지키도록
+  _clsMyApproved=approved;   // 마감/재개 실시간 반영(_clsSyncLock)이 승인 잠금을 풀지 않도록
+  // ⚠️ 여기도 _fbOnline이 필요하다(3차 수정이 리스너 경로만 막고 이 경로를 놓쳤다).
+  //   오프라인으로 열려 fail-open된 회의에서 학생이 타이핑하면 그 쓰기가 로컬 캐시에 남는다.
+  //   다른 회의로 갔다 **되돌아오면** 이 once가 그 캐시에서 즉시 resolve해 _ok=true가 되는데,
+  //   그 값은 서버가 아니라 "방금 내가 쓴 조각"이다 → 온전한 스냅샷으로 승격돼 재연결 시 서버를 덮는다.
+  //   오프라인이면 false로 두는 게 맞다(쓰기는 _clsStripUnverified로 보수적, 폼은 아래에서 그대로 열린다,
+  //   재연결하면 _clsResyncOnReconnect가 제대로 화해시킨다).
+  _clsServerLoaded=_fbOnline;
+  // 2026-09-05 정책 변경: 제출되면 즉시 잠근다(개인 생활기록부와 동일 — 교사 반려 전까지 수정 불가).
+  clsSetLocked(closed||approved||_clsMyStatus==='submitted');
+  _restorePickDraft();   // 쓰다 만 쿠키가 있으면 그 창을 되살린다(잠긴 회의면 내부에서 건너뛴다)
   // 내 응답의 상태만 실시간으로 지켜본다 — 선생님이 반려/승인하면 새로고침 없이 바로 반영.
   //   ⚠️ 폼 내용은 절대 건드리지 않는다(작성 중 글을 서버 값으로 덮으면 안 된다).
   _listenMyClsRecord(mid,me.cd);
 }
+// 이 회의에서 실제로 받아 본 서버 기록의 updated_at(개인 기록의 _lastSrvTs 와 같은 역할)
+let _clsLastSrvTs=0;
 let _clsMyRef=null,_clsMyCb=null;
 function _detachMyClsRecord(){
   if(_clsMyRef&&_clsMyCb){ try{ _clsMyRef.off('value',_clsMyCb); }catch(e){} }
@@ -5691,6 +6310,16 @@ function _listenMyClsRecord(mid,cd){
   _clsMyCb=_clsMyRef.on('value',s=>{
     if(!me||me.cd!==cd||cmCurrent!==mid) return;   // 탭/학생이 바뀐 뒤 온 콜백은 폐기
     const v=s.val()||{};
+    // clsLoadMyRecord의 once가 타임아웃했다면(오프라인) 여기가 첫 서버 값이다. 재연결되는 순간
+    //   폼을 서버와 화해시키고, 그때부터 온전한 스냅샷 쓰기·잠금 해제를 허용한다.
+    //   ⚠️ _fbOnline 필수: 오프라인이면 내 자동저장의 local echo가 이 콜백을 깨우는데, 캐시가 비어 있던
+    //   기기에선 그 v가 "방금 내가 쓴 조각"뿐이다. 그걸 화해로 치면 다음 쓰기가 온전한 스냅샷으로
+    //   승격돼 재연결 시 서버 기록을 통째로 덮는다 — fail-open이 만든 구멍을 여기서 막는다.
+    if(!_clsServerLoaded&&_fbOnline){
+      _clsServerLoaded=true;
+      _clsReconcile(v);
+      _clsSyncLock();
+    }
     // rejected_at 까지 키에 넣어야 '같은 사유로 다시 반려'도 새 알림으로 잡힌다
     const key=(v.status||'')+' '+(v.rejected_reason||'')+' '+(v.rejected_at||'');
     if(key===last) return;                         // 내 자동저장 echo로 화면을 흔들지 않는다
@@ -5703,10 +6332,23 @@ function _listenMyClsRecord(mid,cd){
 //   first=1 이면 화면을 처음 열며 받은 값이라 알림창을 띄우지 않는다(반려는 예외 — 확인 전이면 띄운다).
 function _clsApplyStatus(st,reason,first,rejAt){
   const closed=!_cmIsActive(cmCurrent);
+  _clsMyStatus=st||'';        // 💾가 제출/반려를 draft 로 되돌리지 않도록 판단하는 근거
   _clsMyApproved=(st==='approved');
   _clsRejReason=(st==='rejected')?(reason||'(사유 없음)'):'';
   _clsRejAt=(st==='rejected')?String(rejAt||''):'';
-  clsSetLocked(closed||_clsMyApproved);
+  // 승인되면 대기 중이던 자동저장을 버린다. clsSetLocked는 입력칸만 잠글 뿐이라,
+  //   승인 직전에 예약된 쓰기가 그대로 나가 승인본 위에 학생의 마지막 편집분이 덮였다.
+  if(_clsMyApproved){
+    // ⚠️ 서버 자동저장이 없어졌으므로 취소할 대기 쓰기도 없다.
+    // ⚠️ 여기서 로컬 draft를 지우면 안 된다 — 취소된 대기 저장분(최대 6초)이 로컬에도 없어져
+    //   선생님이 승인을 취소했을 때 그 글이 어디에도 남지 않는다. 표시 문제는
+    //   clsLoadMyRecord의 approved 가드가 푼다(개인 기록의 remoteLocked와 같은 방식).
+  }
+  // 2026-09-05 정책 변경: 제출되면 즉시 잠근다(개인 생활기록부와 동일 — 교사 반려 전까지 수정 불가).
+  clsSetLocked(closed||_clsMyApproved||st==='submitted');
+  // 제출 버튼 라벨 갱신 — 개인 생활기록부와 같은 2단계 규칙(제출하기/제출됨).
+  //   ⚠️ 예전엔 clsSubmitBtn 텍스트를 어디서도 안 바꿔서, 제출해도 계속 "제출하기"로 보였다.
+  { const _csb=document.getElementById('clsSubmitBtn'); if(_csb) _csb.textContent=(st==='submitted'||st==='approved')?'✅ 제출됨':'📮 제출하기'; }
   if(_clsRejReason){
     if(closed) return;
     // 아직 확인하지 않은 반려면 알림창을 띄운다.
@@ -5726,38 +6368,96 @@ function _clsApplyStatus(st,reason,first,rejAt){
 }
 
 /* ─────────── 학생: 저장 ─────────── */
+/* 자동저장은 **로컬에만** 한다 (개인 생활기록부 탭의 autoSave와 같은 정책).
+   서버로 가는 것은 학생이 💾/제출을 눌렀을 때뿐이다.
+   예전엔 6초 디바운스로 서버에도 썼는데, 그 쓰기 하나가 교사 화면의 classRecords
+   child_changed 로 그대로 되돌아와 하루 트래픽의 최대 항목이었다(30명 × 수십 회 × 레코드 전체).
+   ⚠️ 서버 자동저장이 없어졌으므로 "로컬 draft가 서버보다 새로운" 상태가 오래 간다 →
+   로드 시 통째 병합({...server,...draft})을 그대로 두면 서버를 못 읽은 기기의 **빈 스냅샷**이
+   서버 기록을 덮는다. full 플래그 + _clsMergeDraftOverServer 가 그 짝이다(개인 탭과 동일 구조). */
 function clsAutoSave(){
   if(!me||clsLocked||!cmCurrent) return;
   const d=clsCollect(null);
   delete d.status;  // 자동저장이 제출/승인 상태를 draft로 되돌리지 않도록
-  try{ localStorage.setItem(_clsDraftKey(cmCurrent,me.cd),JSON.stringify(d)); }catch(e){}
-  clearTimeout(_clsSaveTimer);
-  // 대기 중 쓰기는 "발화 시점"이 아니라 입력 시점의 회의/학생으로 박제한다.
-  //   2초 안에 회의 탭을 바꾸면 이전 회의 글이 새 회의에 저장되던 류의 사고를 막는다.
-  _clsPending={mid:cmCurrent,cd:me.cd,d};
-  _clsSaveTimer=setTimeout(_clsFlush,2000);
-}
-function _clsFlush(){
-  clearTimeout(_clsSaveTimer); _clsSaveTimer=null;
-  const p=_clsPending; _clsPending=null;
-  if(!p) return;
-  // 선생님이 방금 지운 회의로는 쓰지 않는다 — 지운 회의 아래 아무도 못 보는 유령 노드가 되살아난다.
-  //   (목록을 아직 못 받은 기기는 판단 불가이므로 그대로 쓴다)
-  if(Object.keys(_cmList).length && _cmList[p.mid]===undefined) return;
-  _clsRef(p.mid,p.cd).update(p.d).catch(()=>{});
+  // full: 서버 기록을 한 번이라도 받아 폼이 채워진 뒤의 편집이면 빈 칸 = 의도적 삭제로 신뢰한다.
+  //   서버를 못 본 상태(태블릿 교체·오프라인 로드)의 부분 입력이면 false → 병합이 서버를 보호한다.
+  d.full=_clsServerLoaded;
+  d.updated_at=_draftStamp(_clsLastSrvTs);   // 로컬 draft 전용 기준(서버로 보내는 값은 _svNow 그대로)
+  try{ localStorage.setItem(_clsDraftKey(cmCurrent,me.cd),JSON.stringify(d)); _clsDraftWarned=false; }
+  catch(e){
+    // 쿼터 초과 — 이제 미저장 글은 **이 태블릿에만** 존재하므로 무음 유실은 치명적이다(1회 안내).
+    if(!_clsDraftWarned){ _clsDraftWarned=true; try{ toast('⚠️ 저장공간이 가득 차 글이 백업되지 않아요 — 저장 공간을 비워 주세요'); }catch(_){} }
+  }
 }
 async function clsSaveRecord(status){
   if(!me) return;
   if(!cmCurrent) return alert('열린 학급회의가 없어요.');
   if(clsLocked) return alert('지금은 읽기만 가능해요.');
+  // ⚠️ 재진입 가드는 **맨 앞**이어야 한다. 아래 "대기 저장 폐기" 뒤에 두면, 저장이 진행 중일 때
+  //   누른 두 번째 💾가 "그 사이 학생이 친 글의 대기 저장"을 지우고 자기는 return false로 빠져
+  //   그 편집분이 서버로 영영 안 간다(로컬에만 남는다).
+  if(_clsSaving) return false;   // 연타/제출 중복 진입 방지
   // 이 저장이 최신이므로 대기 중 자동저장은 버린다 (나중에 발화해 덮어쓰지 않도록)
-  clearTimeout(_clsSaveTimer); _clsSaveTimer=null; _clsPending=null;
   const mid=cmCurrent, cd=me.cd;
   const d=clsCollect(status||'draft');
-  if(status==='submitted'){ d.submitted_at=Date.now(); d.rejected_reason=''; }
+  if(status==='submitted'){ d.submitted_at=_svNow(); d.rejected_reason=''; d.rejected_at=null; }
+  /* ⚠️ 임시저장이 서버 status 를 draft 로 되돌리면 안 된다.
+     학생은 제출한 뒤에도 고쳐서 다시 낼 수 있으므로(승인 전까지 폼이 열려 있다) 💾를 누를 수 있는데,
+     그때 status:'draft' 가 그대로 나가면 **제출이 조용히 풀려** 교사 현황에서 미제출로 보인다.
+     개인 기록 💾에는 같은 가드가 있는데(배너 표시 여부로 판단) 여기만 빠져 있었다.
+     상태를 바꾸는 건 명시적 제출(submitted)과 교사(승인/반려)뿐이다. */
+  //   ⚠️ 서버 상태를 아직 못 봤으면(_clsServerLoaded=false, 오프라인 fail-open) **모르는 것이므로 건드리지 않는다.**
+  //   그러지 않으면 이 가드가 오프라인에서만 뚫려 서버의 submitted 가 draft 로 내려간다.
+  if((status||'draft')==='draft'
+     && (!_clsServerLoaded || _clsMyStatus==='submitted' || _clsMyStatus==='rejected' || _clsMyStatus==='approved')) delete d.status;
+  // 로컬 draft에는 상태 필드를 넣지 않는다(clsAutoSave와 동일 규칙). 넣으면 다음 로드의
+  //   {...server,...draft} 병합에서 낡은 status가 서버 진실을 가려 화면이 거짓말을 한다.
+  const dLocal={...d};
+  delete dLocal.status; delete dLocal.submitted_at; delete dLocal.rejected_reason; delete dLocal.rejected_at;
+  dLocal.full=_clsServerLoaded;   // 자동저장 draft 와 같은 규칙(서버를 못 봤으면 온전한 스냅샷이 아니다)
+  dLocal.updated_at=_draftStamp(_clsLastSrvTs);   // 로컬 미러도 자동저장과 같은 기준이어야 한다
+  _clsSaving=true;   // 이 줄과 try 사이에서 throw될 수 있는 코드가 있으면 안 된다(플래그 박제)
+  const btns=['clsSaveBtn','clsSubmitBtn'].map(id=>document.getElementById(id));
+  const prev=btns.map(b=>b?[b.disabled,b.textContent]:null);
+  btns.forEach(b=>{ if(b) b.disabled=true; });
   try{
-    await _clsRef(mid,cd).update(d);
-    try{ localStorage.removeItem(_clsDraftKey(mid,cd)); }catch(e){}
+    // 로컬을 먼저 확정 — 서버 쓰기가 실패해도 쓴 글은 이 태블릿에 남는다(개인 기록 💾와 같은 순서).
+    let lsOk=false;
+    try{ localStorage.setItem(_clsDraftKey(mid,cd),JSON.stringify(dLocal)); lsOk=true; }catch(e){}
+    // ⚠️ 생 await 금지: RTDB 쓰기는 오프라인이면 resolve도 reject도 하지 않고 큐에만 남는다 →
+    //   여기서 영원히 멈춰 토스트도 에러창도 안 뜨고, 학생 눈엔 💾/제출이 **아무 반응 없는 버튼**이 된다.
+    //   타임아웃은 취소가 아니다(쓰기는 큐에 살아 재연결 시 반영). 안내만 정직하게 갈라 준다.
+    let svOk=true;
+    // 서버 기록을 아직 못 읽었으면(오프라인 로드) 빈 칸은 빼고 보낸다 — 자동저장과 같은 규칙.
+    /* ⚠️ 서버 쓰기는 **제출 때만**(2026-09-04 정책). 작성 중(draft)은 로컬에만 남긴다.
+       status 를 조건으로 두어, 나중에 누가 draft 로 불러도 서버로 새지 않는다. */
+    if(status==='submitted'){
+      try{ await _withTimeout(_clsRef(mid,cd).update(_clsServerLoaded?d:_clsStripUnverified(d)),15000); }
+      catch(e){ svOk=false; }
+    }
+    /* 로컬 미러는 **서버에 올라간 뒤에만** 지운다.
+       ⚠️ 작성 중(draft)에는 이제 서버로 안 보내므로 svOk 가 true 인 채로 남는다 —
+       그것만 보고 지우면 이 태블릿에도 서버에도 없는 상태가 된다(작성 중 글이 통째로 사라짐).
+       그래서 '제출이고 성공했을 때'로 조건을 좁힌다. */
+    const _onServer=(status==='submitted' && svOk);
+    if(_onServer){
+      try{ localStorage.removeItem(_clsDraftKey(mid,cd)); }catch(e){}
+      // 상태 리스너의 echo를 기다리지 않고 바로 반영 — finally의 라벨/잠금 재계산이 이 값을 쓴다.
+      //   (제출 즉시 잠그는 정책이라, 리스너를 기다리면 그 사이 다시 누를 수 있는 틈이 생긴다.)
+      _clsMyStatus='submitted';
+      clsSetLocked(true);
+    }
+    // 서버 쓰기는 캡처한 mid/cd로 이미 정확히 끝났다. 하지만 **안내는** 그 사이 회의 탭을 바꾸거나
+    //   로그아웃했으면 띄우면 안 된다 — 다른 회의 화면에 엉뚱한 토스트가 뜨고, 로그아웃했으면
+    //   로그인 화면 위에 알림창이 남는다(신원 캡처 규칙: 서버 쓰기는 진행, UI 갱신만 건너뛴다).
+    if(!me||me.cd!==cd||cmCurrent!==mid) return svOk;
+    if(!svOk){
+      showClsNotice('⚠️', lsOk?'이 태블릿에만 저장됐어요':'저장하지 못했어요',
+        lsOk?'인터넷이 느려요. 연결되면 자동으로 올라가요.\n지금 태블릿을 끄지 말아 주세요.'
+            :'인터넷 연결을 확인하고 다시 눌러주세요.',
+        'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
+      return false;
+    }
     // 제출 완료 안내는 상태 리스너가 예쁜 창으로 띄운다(배너 없음)
     if(status!=='submitted') toast('💾 임시저장 완료');
     return true;
@@ -5765,6 +6465,19 @@ async function clsSaveRecord(status){
     showClsNotice('⚠️','저장하지 못했어요','인터넷 연결을 확인하고 다시 눌러주세요.\n\n'+(e&&e.message||''),
       'linear-gradient(135deg,#FFA726,#E65100)','#BF360C');
     return false;
+  }finally{
+    _clsSaving=false;
+    // ⚠️ 무조건 disabled=false로 되돌리면, 저장 대기 중 선생님이 승인했을 때 clsSetLocked가
+    //   걸어 둔 잠금을 덮어 승인된 학생에게 버튼이 다시 열린다 → 현재 잠금 상태로 재계산한다.
+    // ⚠️ 라벨은 클릭 전 스냅샷(prev)으로 되돌리면 안 된다 — 방금 제출이 성공했어도 prev는
+    //   "제출하기"(클릭 전 문구)라서, 상태 리스너가 "제출됨"으로 막 바꿔놓은 걸 도로 덮어버렸다.
+    //   clsSubmitBtn은 항상 현재 _clsMyStatus 기준으로 다시 계산한다(clsSaveBtn은 문구가 안 바뀌므로 그대로 복원).
+    btns.forEach((b,i)=>{
+      if(!b||!prev[i]) return;
+      b.disabled=clsLocked;
+      if(b.id==='clsSubmitBtn') b.textContent=(_clsMyStatus==='submitted'||_clsMyStatus==='approved')?'✅ 제출됨':'📮 제출하기';
+      else b.textContent=prev[i][1];
+    });
   }
 }
 async function clsSubmitRecord(){
@@ -5783,7 +6496,7 @@ async function clsSubmitRecord(){
     const el=document.getElementById(id), min=charLimits[id]||0;
     if(min>0&&(el?.value||'').trim().length<min) miss.push(`${label}: 최소 ${min}자 이상 써주세요`);
   };
-  chk('clsGood','좋았던 점 / 감사 나누기'); chk('clsBad','아쉬웠던 점'); chk('clsWish','해결방안');
+  chk('clsGood','좋았던 점이나 감사 나누기'); chk('clsBad','아쉬웠던 점과 해결방안'); chk('clsWish','바라는 점이나 건의사항');
   // 개인 생활기록부와 같은 예쁜 창을 쓴다(예전엔 alert/confirm이었다)
   if(miss.length) return showSubmitErrorModal(miss);
   showSubmitConfirmModal(()=>{ clsSaveRecord('submitted'); });
@@ -5804,14 +6517,24 @@ async function loadClassOverview(force,skipMeta){
   const mid=(sel&&sel.value)||(sortedMeetings().slice(-1)[0]||[])[0]||'';
   if(sel&&mid) sel.value=mid;
   _clsViewMid=mid;
-  if(!mid){ if(wrap) wrap.innerHTML='<div style="color:#aaa;text-align:center;padding:24px;font-size:15px;">회의를 추가하면 현황이 표시됩니다</div>'; _clsRecords={}; return; }
+  if(!mid){
+    const _empty='<div style="color:#aaa;text-align:center;padding:24px;font-size:15px;">회의를 추가하면 현황이 표시됩니다</div>';
+    if(wrap) wrap.innerHTML=_empty;
+    const rwrap=document.getElementById('clsResultWrap'); if(rwrap) rwrap.innerHTML=_empty;
+    _clsRecords={}; return;
+  }
   if(wrap&&force===true) wrap.innerHTML='로딩 중...';
   // 이미 이 회의를 실시간으로 보고 있으면 전체를 다시 받지 않는다.
   //   (승인/반려/삭제 뒤 호출에서 매번 전체를 재다운로드하던 낭비 제거 +
   //    읽는 사이 도착한 child_changed 를 옛 스냅샷이 덮어쓰던 레이스도 함께 사라진다)
+  // 쿠키 목록은 화면을 그리는 데 쓰는 정의라 진입할 때마다 최신이어야 한다(작은 노드 1건).
+  //   ⚠️ live 가드 **안에** 두면 안 된다 — 탭 구독을 유지하게 되면서 재진입 시 live=true 가 되어
+  //   갱신이 통째로 건너뛰어졌다(다른 기기가 목록을 바꾸면 옛 이름으로 그려짐).
+  //   ⚠️ 그렇다고 무조건 읽으면 승인·반려마다(loadClassOverview(false,1)) 매번 왕복한다.
+  //   skipMeta 가 곧 "메타를 새로 받아야 하는 진입인가"다 — 탭 진입·회의 변경·새로고침에서만 읽는다.
+  if(!skipMeta) await loadCookieList();
   const live=(_clsOvMid===mid&&_clsOvRef);
   if(!live||force===true){
-    await loadCookieList();
     try{ _clsRecords=(await saengRef.child('classRecords/'+mid).once('value')).val()||{}; }
     catch(e){ _clsRecords={}; }
   }
@@ -5847,11 +6570,27 @@ function _listenClsOverview(mid){
   const r=ref.on('child_removed',s=>{ if(_clsViewMid!==mid) return; delete _clsRecords[s.key]; bump(); });
   _clsOvRef=ref; _clsOvCb={a,c,r};
 }
+/* 명단에 없는 응답(=삭제된 학생)을 집계·CSV·PDF에서 제외한다.
+   학생별 제출 현황 표는 명단(shopData.stu) 기준인데 집계/내보내기는 _clsRecords 전체를 썼다 →
+   같은 화면에서 기준이 갈려 '명단 30명인데 32표'가 나오고, CSV·PDF엔 삭제된 학생 이름이 남았다.
+   ⚠️ 명단이 아직 안 왔을 때 거르면 화면이 통째로 빈다 → **명단이 비었으면 거르지 않는다**.
+   (_healRosterIfMissing 이 '명단에 없는 기록'을 보고 미러를 보강하므로, 그 뒤에도 남으면 진짜 삭제분이다.)
+   서버 데이터는 지우지 않는다 — 표시에서만 빼므로 되돌릴 수 있다. */
+function _clsRosterRows(){
+  const all=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}));
+  const roster=((shopData&&shopData.stu)||[]).filter(s=>s.nm);
+  if(!roster.length) return {rows:all, excluded:0};   // 명단 미확보 → 그대로 통과(빈 화면 방지)
+  const has=new Set(roster.map(s=>String(s.cd).trim()));
+  const rows=all.filter(r=>has.has(String(r.cd).trim()));
+  return {rows, excluded: all.length-rows.length};
+}
 function renderClassOverview(){
   const wrap=document.getElementById('classOverviewWrap');
   if(!wrap) return;
+  // 자가 치유 — 개요와 같은 이유(제출 현황 표가 명단 기준으로 그려진다)
+  _healRosterIfMissing(Object.keys(_clsRecords||{}),()=>renderClassOverview());
   const students=((shopData&&shopData.stu)||[]).filter(s=>s.nm);
-  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}));
+  const {rows, excluded:_clsExcluded}=_clsRosterRows();   // 삭제된 학생 응답은 집계에서 제외
   const byCd={}; rows.forEach(r=>byCd[String(r.cd)]=r);
   const done=rows.filter(r=>r.status==='submitted'||r.status==='approved');
 
@@ -5907,15 +6646,20 @@ function renderClassOverview(){
   _clsFs={bright,improve,maxB,maxI,good:gabItems('good'),bad:gabItems('bad'),wish:gabItems('wish')};
 
   wrap.innerHTML=`
-    <div class="t-card" style="margin-bottom:14px;">
+    <div class="t-card">
       <div style="font-size:17px;color:#FF5C8D;font-weight:bold;margin-bottom:10px;">🙋 학생별 제출 현황</div>
       <table class="status-table"><thead><tr><th>이름</th><th>상태</th><th>제출 시간</th></tr></thead><tbody>${stuRows||'<tr><td colspan="3">학생 명단이 없습니다</td></tr>'}</tbody></table>
     </div>
-    <div class="t-card clsres" data-rs="0" data-anon="0" style="margin:14px 0;">
+  `;
+  // 결과는 별도 탭(#clsResultWrap)에 그린다 — 여기 없으면(그 탭을 아직 안 열었으면) 건너뛴다.
+  //   데이터(_clsFs 등)는 그대로 계산해 두어야 그 탭을 열 때 openClsFs 전체화면이 최신 값을 쓴다.
+  const rwrap=document.getElementById('clsResultWrap');
+  if(rwrap) rwrap.innerHTML=`
+    <div class="t-card clsres" data-rs="0" data-anon="0">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-        <div style="font-size:17px;color:#FF5C8D;font-weight:bold;">📊 학급회의 결과</div>
+        <div style="font-size:17px;color:#FF5C8D;font-weight:bold;">📊 회의 결과</div>
+        ${_clsExcluded?`<span title="명단에서 삭제된 학생의 응답입니다. 서버에는 남아 있고 표시에서만 빠집니다." style="font-size:12px;color:#B26A00;background:#FFF3E0;border:1px solid #FFCC80;border-radius:8px;padding:2px 8px;">명단에 없는 응답 ${_clsExcluded}건 제외</span>`:''}
         <span style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-          ${_clsToggleBtns(!!window.__clsRs,!!window.__clsAnon)}
           <button class="pink-btn soft" onclick="openClsFs('all',1)" title="인쇄">🖨</button>
           <button class="pink-btn" onclick="openClsFs('all')" title="전체 화면">⛶</button>
         </span>
@@ -5928,28 +6672,25 @@ function renderClassOverview(){
       </div>
     </div>
   `;
-  _clsApplyToggles();   // 다시 그린 뒤에도 이유/익명 선택 유지
+  // 패널마다 토글이 독립이고 항상 기본값(숨김)으로 다시 그려지므로, 전체를 다시 맞추는 절차가 필요 없다.
 }
 /* ─────────── 회의 결과 패널 + 전체화면 ───────────
    같은 데이터(_clsFs)를 작은 카드와 전체화면 양쪽에서 그린다. fs=1이면 글씨를 키운다. */
 let _clsFs={bright:[],improve:[],maxB:0,maxI:0,good:[],bad:[],wish:[]};
-// 기본은 '이유 숨기기 중 · 이름 숨기기 중'. 켠 상태는 이 화면을 보는 동안만 유지되고
-//   새로고침하면 다시 기본으로 돌아간다(기기에 저장하지 않는다).
-window.__clsRs   = false;
-window.__clsAnon = true;
+// 패널마다 독립 토글(항상 '이유 숨기기 중 · 이름 숨기기 중' 기본) — 어디에도 저장하지 않는다.
 const CLS_PANELS=[
   {k:'bright', t:'✨ 가장 빛났던 쿠키', c:'#1565C0'},
   {k:'improve',t:'🔥 앞으로 빛날 쿠키', c:'#C2185B'},
-  {k:'good',   t:'💚 좋았던 점 / 감사 나누기', c:'#2E7D32'},
-  {k:'bad',    t:'🧡 아쉬웠던 점', c:'#EF6C00'},
-  {k:'wish',   t:'💜 해결방안', c:'#6A1B9A'}
+  {k:'good',   t:'💚 좋았던 점이나 감사 나누기', c:'#2E7D32'},
+  {k:'bad',    t:'🧡 아쉬웠던 점과 해결방안', c:'#EF6C00'},
+  {k:'wish',   t:'💜 바라는 점이나 건의사항', c:'#6A1B9A'}
 ];
 // 순위는 오직 득표수 — 같은 표수면 같은 등수(1,1,3식). 별점/불꽃 평균은 순위와 무관한 참고값이다.
 const CLS_TOP_N=3;   // 순위는 3위까지만 펼쳐 두고 나머지는 + 버튼으로
 function _clsBarHtml(list,max,color,type,fs){
   if(!list.length) return `<div style="color:#bbb;font-size:${fs?20:14}px;">아직 제출된 표가 없어요</div>`;
   const rows=list.map(([n,c,avg,rs],i,arr)=>`
-    <div style="margin-bottom:${fs?12:7}px;">
+    <div style="margin-bottom:${fs?12:7}px;${(rs&&rs.length)?'cursor:pointer;':''}" ${(rs&&rs.length)?`onclick="var r=this.querySelector('.rs');if(r&&r.style.display==='none')r.style.display='';"`:''} title="${(rs&&rs.length)?'눌러서 이유 보기':''}">
       <div style="display:flex;align-items:center;gap:${fs?14:10}px;">
         <div style="width:${fs?34:26}px;text-align:right;font-size:${fs?22:15}px;color:#bbb;">${arr.findIndex(x=>x[1]===c)+1}</div>
         <div style="width:${fs?190:130}px;font-size:${fs?23:16}px;color:#444;">🍪 ${_clsEsc(n)}</div>
@@ -5960,8 +6701,8 @@ function _clsBarHtml(list,max,color,type,fs){
         <div style="width:${fs?104:78}px;font-size:${fs?20:14}px;color:${_isFlame(type)?'#E64A19':'#FFA000'};" title="${_isFlame(type)?'불꽃 점수 평균':'별점 평균'}">${avg?(_isFlame(type)?'🔥':'★')+avg.toFixed(1):''}</div>
       </div>
       ${(rs&&rs.length)?`<div class="rs" style="display:none;margin:${fs?'6px 0 10px':'4px 0 8px'} ${fs?'238px':'166px'};">
-        ${rs.map(([who,txt])=>`<div style="font-size:${fs?18:13}px;color:#666;margin-bottom:3px;white-space:pre-wrap;">
-          <span class="nm" style="color:#FF7BA9;">${_clsEsc(who)}</span> ${_clsEsc(txt)}</div>`).join('')}
+        ${rs.map(([who,txt])=>`<div style="font-size:${fs?18:13}px;color:#666;margin-bottom:3px;white-space:pre-wrap;cursor:pointer;" title="우클릭하면 이름이 보여요" oncontextmenu="event.preventDefault();event.stopPropagation();this.querySelector('.nm').style.display='';">
+          <span class="nm" style="display:none;color:#FF7BA9;">${_clsEsc(who)}</span> ${_clsEsc(txt)}</div>`).join('')}
       </div>`:''}
     </div>`);
   // 5위까지만 펼쳐 두고, 나머지는 아래 + 버튼으로 연다(인라인 토글이라 새 탭에서도 동작)
@@ -5979,8 +6720,8 @@ function _clsGabHtml(items,color,fs,mode){
   // 글이 많아도 칸이 화면을 넘지 않도록 높이를 고정하고 그 안에서 스크롤한다
   return `<div class="clsscroll" style="height:${CLS_GAB_H[mode||'card']||CLS_GAB_H.card};">`
     + items.map(([nm,v,cd])=>`<div style="background:#FAFAFA;border-radius:10px;padding:${fs?'10px 14px':'7px 10px'};margin-bottom:${fs?8:5}px;">
-    <div class="nm" style="font-size:${fs?17:12}px;color:${color};font-weight:bold;cursor:pointer;" onclick="showClsStatusMini('${String(cd).replace(/'/g,"\\'")}',event)">${_clsEsc(nm)}</div>
-    <div style="font-size:${fs?20:13}px;color:#555;white-space:pre-wrap;line-height:1.5;">${_clsEsc(v)}</div>
+    <div class="nm" style="display:none;font-size:${fs?17:12}px;color:${color};font-weight:bold;cursor:pointer;" onclick="showClsStatusMini('${String(cd).replace(/'/g,"\\'")}',event)">${_clsEsc(nm)}</div>
+    <div style="font-size:${fs?20:13}px;color:#555;white-space:pre-wrap;line-height:1.5;cursor:pointer;" title="우클릭하면 이름이 보여요" oncontextmenu="event.preventDefault();this.previousElementSibling.style.display='';">${_clsEsc(v)}</div>
   </div>`).join('')
     + `</div>`;
 }
@@ -5991,34 +6732,14 @@ function _clsPanelBody(k,fs,mode){
   const p=CLS_PANELS.find(x=>x.k===k)||{c:'#888'};
   return _clsGabHtml(d[k]||[],p.c,fs,mode);
 }
-// 토글 버튼은 부모 창 함수를 쓰지 않는 인라인 스크립트다 — 새 탭(전체화면)에서도 그대로 동작한다.
-const _BTN_STYLE="border:2px solid #FFD6E0;background:white;color:#FF5C8D;border-radius:10px;font-family:'Jua';font-size:13px;padding:3px 10px;cursor:pointer;";
-// 토글은 결과 영역(.clsres) 전체에 한 번에 걸린다 — 패널마다 따로 누를 필요가 없다.
-const _RS_TOGGLE=`onclick="var p=this.closest('.clsres')||document.querySelector('.clsres'),show=p.getAttribute('data-rs')!=='1';p.setAttribute('data-rs',show?'1':'0');p.querySelectorAll('.rs').forEach(function(e){e.style.display=show?'':'none';});this.textContent=show?'💬 이유 보이기 중':'💬 이유 숨기기 중';window.__clsRs=show;"`;
-const _ANON_TOGGLE=`onclick="var p=this.closest('.clsres')||document.querySelector('.clsres'),anon=p.getAttribute('data-anon')!=='1';p.setAttribute('data-anon',anon?'1':'0');p.querySelectorAll('.nm').forEach(function(e){e.style.display=anon?'none':'';});this.textContent=anon?'🙈 이름 숨기기 중':'🙂 이름 보이기 중';window.__clsAnon=anon;"`;
-function _clsToggleBtns(rs,anon){
-  return `<button class="btn-rs" style="${_BTN_STYLE}" ${_RS_TOGGLE}>${rs?'💬 이유 보이기 중':'💬 이유 숨기기 중'}</button>
-          <button class="btn-anon" style="${_BTN_STYLE}" ${_ANON_TOGGLE}>${anon?'🙈 이름 숨기기 중':'🙂 이름 보이기 중'}</button>`;
-}
-/* 학생이 제출하면 화면이 다시 그려진다 — 그때 켜 둔 이유/익명 상태가 풀리지 않도록 다시 입힌다.
-   (인라인 토글이 window.__clsRs/__clsAnon 에 상태를 남긴다) */
-function _clsApplyToggles(){
-  const p=document.querySelector('#classOverviewWrap .clsres');
-  if(!p) return;
-  const rs=!!window.__clsRs, an=!!window.__clsAnon;
-  p.setAttribute('data-rs',rs?'1':'0'); p.setAttribute('data-anon',an?'1':'0');
-  p.querySelectorAll('.rs').forEach(e=>{e.style.display=rs?'':'none';});
-  p.querySelectorAll('.nm').forEach(e=>{e.style.display=an?'none':'';});
-  const b1=p.querySelector('.btn-rs'), b2=p.querySelector('.btn-anon');
-  if(b1) b1.textContent=rs?'💬 이유 보이기 중':'💬 이유 숨기기 중';
-  if(b2) b2.textContent=an?'🙈 이름 숨기기 중':'🙂 이름 보이기 중';
-}
+// 2026-09-05 정책: 버튼으로 켜고 끄는 대신, 내용을 좌클릭하면 이유가 보이고 그 이유를
+//   우클릭하면 작성자 이름이 보인다(항목마다 독립, 어디에도 저장하지 않음 — 다시 그리면 항상 숨김부터 시작).
 function _clsPanelCard(k,fs,mode){
   const p=CLS_PANELS.find(x=>x.k===k); if(!p) return '';
   return `<div class="panel" style="border:2px solid #FFE4EF;border-radius:16px;padding:${fs?'16px 18px':'12px 14px'};background:white;min-width:0;">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:${fs?12:8}px;flex-wrap:wrap;">
       <div style="font-size:${fs?24:16}px;color:${p.c};font-weight:bold;">${p.t}</div>
-      <button class="clsfs" style="margin-left:auto;" onclick="openClsFs('${p.k}')" title="이 항목만 전체 화면">⛶</button>
+      ${mode==='fsone'?'':`<button class="clsfs" style="margin-left:auto;" onclick="openClsFs('${p.k}')" title="이 항목만 전체 화면">⛶</button>`}
     </div>
     ${_clsPanelBody(k,fs,mode)}
   </div>`;
@@ -6042,15 +6763,12 @@ function openClsFs(k,doPrint){
   const meet=_clsEsc(_cmLabel(_clsViewMid)||'학급회의');
   const titles={all:'학급회의 결과'};
   CLS_PANELS.forEach(p=>titles[p.k]=p.t);
-  // 교사 화면에서 켜 둔 이유/익명 설정을 그대로 가지고 연다
-  const rs=!!window.__clsRs, anon=!!window.__clsAnon;
-  let views=`<div class="clsres" data-rs="${rs?1:0}" data-anon="${anon?1:0}">${
+  // 패널마다 이유/익명 토글이 독립이고 항상 기본값(숨김)으로 연다 — 새 창도 예외 없음.
+  let views=`<div class="clsres">${
       CLS_FS_SEQ.map(key=>`<div class="fsview" id="v_${key}" style="display:none;">${_clsFsView(key)}</div>`).join('')
     }</div>`
     .replace(/onclick="showClsStatusMini\([^"]*\)"/g,'')
     .replace(/openClsFs\(/g,'go(');
-  if(rs)   views=views.split('class="rs" style="display:none;').join('class="rs" style="');
-  if(anon) views=views.split('class="nm" style="').join('class="nm" style="display:none;');
   const w=window.open('','_blank');   // 크기 지정 없이 열어야 팝업창이 아니라 새 탭으로 열린다
   if(!w) return alert('팝업이 차단됐어요. 이 사이트의 팝업을 허용해 주세요.');
   w.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8">
@@ -6092,7 +6810,7 @@ function openClsFs(k,doPrint){
     <h1 id="t"></h1>
     <button class="nav" onclick="go(1)" title="다음 (→)">›</button>
   </span>
-  <span class="sp" style="justify-content:flex-end;">${_clsToggleBtns(rs,anon)}</span>
+  <span class="sp" style="justify-content:flex-end;"></span>
 </div>
 ${views}
 <script>
@@ -6155,8 +6873,9 @@ async function showClsStatusMini(cd,event){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
         <b style="font-size:16px;color:#FF5C8D;">${_clsEsc(nm)} 학생</b>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${st==='approved'?''
-            :`<button class="pink-btn" style="font-size:13px;padding:5px 12px;" onclick="approveClassRecord('${e}',1)">✅ 승인</button>`}
+          ${st==='approved'
+            ? `<button class="pink-btn soft" style="font-size:13px;padding:5px 12px;" onclick="unapproveClassRecord('${e}',1)">↩️ 승인취소</button>`
+            : `<button class="pink-btn" style="font-size:13px;padding:5px 12px;" onclick="approveClassRecord('${e}',1)">✅ 승인</button>`}
           <button class="pink-btn soft" style="font-size:13px;padding:5px 12px;" onclick="rejectClassRecord('${e}',1)">🔙 반려</button>
           <button class="pink-btn deep" style="font-size:13px;padding:5px 12px;" onclick="deleteClassRecord('${e}',1)">🗑 삭제</button>
         </div>
@@ -6165,9 +6884,9 @@ async function showClsStatusMini(cd,event){
     </div>
     ${picks('✨ 가장 빛났던 쿠키','#1565C0',pb,'bright')}
     ${picks('🔥 앞으로 빛날 쿠키','#C2185B',pi,'improve')}
-    ${sec('좋았던 점 / 감사 나누기',r.good,'#2E7D32')}
-    ${sec('아쉬웠던 점',r.bad,'#EF6C00')}
-    ${sec('해결방안',r.wish,'#6A1B9A')}
+    ${sec('좋았던 점이나 감사 나누기',r.good,'#2E7D32')}
+    ${sec('아쉬웠던 점과 해결방안',r.bad,'#EF6C00')}
+    ${sec('바라는 점이나 건의사항',r.wish,'#6A1B9A')}
     ${st==='rejected'&&r.rejected_reason?`<div style="background:#FFF3E0;border-radius:10px;padding:8px 12px;font-size:12px;color:#E65100;">반려 사유: ${_clsEsc(r.rejected_reason)}</div>`:''}`;
 }
 // fromMini=1 이면 미니창을 다시 그린다(삭제만 닫는다)
@@ -6209,13 +6928,13 @@ function _clsPatchLocal(cd,patch){
   if(_clsRecords[cd]) Object.assign(_clsRecords[cd],patch);
 }
 function exportClassCsv(){
-  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}));
+  const {rows}=_clsRosterRows();   // 명단에 없는(삭제된) 학생은 내보내지 않는다
   if(!rows.length) return alert('내보낼 기록이 없어요.');
   const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const head=['번호','이름','상태'];
   for(let i=1;i<=CLS_PICK_MAX;i++) head.push(`빛났던 쿠키${i}`,`별점${i}`,`이유${i}`);
   for(let i=1;i<=CLS_PICK_MAX;i++) head.push(`빛날 쿠키${i}`,`불꽃점수${i}`,`이유${i}`);
-  head.push('좋았던 점/감사 나누기','아쉬웠던 점','해결방안');
+  head.push('좋았던 점이나 감사 나누기','아쉬웠던 점과 해결방안','바라는 점이나 건의사항');
   const lab={draft:'작성중',submitted:'제출',approved:'승인',rejected:'반려'};
   const lines=[head.map(q).join(',')];
   const cells=list=>{
@@ -6308,7 +7027,7 @@ async function _savePdf(filename,pagesHtml){
 function exportClassPdf(){
   if(!_clsViewMid) return alert('먼저 회의를 선택하세요.');
   const meet=_cmLabel(_clsViewMid)||'학급회의';
-  const rows=Object.entries(_clsRecords).map(([cd,r])=>({cd,...(r||{})}))
+  const rows=_clsRosterRows().rows   // 명단에 없는(삭제된) 학생은 인쇄하지 않는다
     .sort((a,b)=>{
       const na=Number(a.student_no),nb=Number(b.student_no);
       const va=isNaN(na)?Infinity:na, vb=isNaN(nb)?Infinity:nb;
@@ -6328,9 +7047,9 @@ function exportClassPdf(){
         <div><h3 class="c-bright">✨ 가장 빛났던 쿠키</h3>${picks(_normPicks(r.picks_bright,r.bright,r.bright_reason),'bright')}</div>
         <div><h3 class="c-improve">🔥 앞으로 빛날 쿠키</h3>${picks(_normPicks(r.picks_improve,r.improve,r.improve_reason),'improve')}</div>
       </div>
-      <h3 class="c-good">💚 좋았던 점 / 감사 나누기</h3><div class="box">${_clsEsc(r.good)||'(없음)'}</div>
-      <h3 class="c-bad">🧡 아쉬웠던 점</h3><div class="box">${_clsEsc(r.bad)||'(없음)'}</div>
-      <h3 class="c-wish">💜 해결방안</h3><div class="box">${_clsEsc(r.wish)||'(없음)'}</div>
+      <h3 class="c-good">💚 좋았던 점이나 감사 나누기</h3><div class="box">${_clsEsc(r.good)||'(없음)'}</div>
+      <h3 class="c-bad">🧡 아쉬웠던 점과 해결방안</h3><div class="box">${_clsEsc(r.bad)||'(없음)'}</div>
+      <h3 class="c-wish">💜 바라는 점이나 건의사항</h3><div class="box">${_clsEsc(r.wish)||'(없음)'}</div>
     </div>`;
   }).join('');
   _savePdf(`학급회의_${meet}`,pages);
@@ -6343,12 +7062,15 @@ async function exportRecordsPdf(){
   toast('📄 PDF 준비 중...');
   let recs={},noms={},dals={};
   try{
-    const [rS,nS,dS]=await Promise.all([
-      saengRef.child('records/'+month).once('value'),
+    const [rV,nS,dS]=await Promise.all([
+      _readMonthRecords(month),
       saengRef.child('nominations').orderByKey().startAt(month+'_').endAt(month+'_').once('value'),
       saengRef.child('dalgona').orderByKey().startAt(month+'_').endAt(month+'_').once('value')
     ]);
-    recs=rS.val()||{}; noms=nS.val()||{}; dals=dS.val()||{};
+    recs=rV;
+    // prefix 쿼리는 다른 달까지 가져온다(위 _fetchMonthNomsAndDals 주석 참고) — 같은 규칙으로 거른다.
+    noms={}; nS.forEach(c=>{ const v=c.val()||{}; if(_isMonthRec(c.key,v,month)) noms[c.key]=v; });
+    dals={}; dS.forEach(c=>{ const v=c.val()||{}; if(_isMonthRec(c.key,v,month)) dals[c.key]=v; });
   }catch(e){ return alert('불러오기 실패: '+e.message); }
   const rows=Object.entries(recs).map(([cd,r])=>({cd,...(r||{})}))
     .sort((a,b)=>{
@@ -6413,7 +7135,13 @@ async function _fetchMyStu(){
   const k = _shopKeyByCd[c];
   if(k!==undefined){
     const v=(await shopRef.child('stu/'+k).once('value')).val();
-    if(v) return v;
+    // ⚠️ cd 대조 필수 — 이 키는 roster 미러에서 온 파생값이라 낡을 수 있다(레거시 정수키 모드에서
+    //   학생 삭제 후 그 인덱스 재사용, 상점의 cd키 마이그레이션 등). 검증 없이 믿으면 그 자리에
+    //   있는 **남의 레코드**를 내 잔액으로 읽어 결제 가능/부족 판정이 뒤집힌다(실제 차감은 발송 경로가
+    //   cd 로 다시 찾으므로, 화면은 "있다"는데 발송은 shortfall 나는 불일치가 된다).
+    if(v && String(v.cd).trim()===c) return v;
+    if(v) console.warn('[_fetchMyStu] 낡은 키 매핑 폐기', {cd:c, key:k, got:v.cd});
+    delete _shopKeyByCd[c];   // 낡은 매핑 제거 → 아래 단건 쿼리가 올바른 키를 다시 심는다
   }
   for(const q of [c, (c!=='' && !isNaN(Number(c))) ? Number(c) : null]){
     if(q===null) continue;
@@ -6437,66 +7165,252 @@ function _syncRoster(entries, allowEmpty){
     entries.forEach(([k,v])=>{ if(v&&v.cd!=null){ const c=String(v.cd).trim(); if(c && r[c]===undefined) r[c]={nm:v.nm||c, no:(v.no!=null?v.no:null), k}; } });
     // 빈 스냅샷으로 미러를 지우지 않는다(부분 로드 방어). 단 명단관리에서 삭제로 0명이 된
     //   경우는 '진짜 비움'이므로 allowEmpty 로 명시해야 학생 기기의 유령 1명이 사라진다.
+    // ⚠️ 해시는 **쓰기가 성공한 뒤에만** 확정한다. 미리 찍어 두면 write 가 실패했을 때
+    //   "이미 그 상태로 썼다"고 착각해, 내용이 또 바뀌기 전까지 미러가 영영 갱신되지 않는다
+    //   (모든 기기가 미러로 부팅하므로 = 지운 학생이 학생 기기에 계속 남는다).
     if(!Object.keys(r).length){
       if(!allowEmpty) return;
-      window._rosterHash='{}';
-      saengRef.child('roster').remove().catch(()=>{});
+      // set 경로와 같은 가드를 쓴다 — 여기만 빠뜨리면 전원 삭제 상태에서 _refreshRoster 가 불릴 때마다
+      //   remove 를 반복해 보낸다(비대칭이 곧 버그다).
+      if(window._rosterHash==='{}' || window._rosterHashSending==='{}') return;
+      window._rosterHashSending='{}';
+      const _doneE=()=>{ if(window._rosterHashSending==='{}') window._rosterHashSending=null; };
+      saengRef.child('roster').remove().then(()=>{ window._rosterHash='{}'; _doneE(); },_doneE);
       return;
     }
     const h=JSON.stringify(r);
-    if(window._rosterHash===h) return;                      // 변경분만 기록
-    window._rosterHash=h;
-    saengRef.child('roster').set(r).catch(()=>{});
+    // 확정분(_rosterHash)과 **전송 중**(_rosterHashSending)을 모두 본다. 해시를 성공 뒤에 찍게 바꾸면서
+    //   "전송 중 같은 내용"을 걸러 낼 수단이 사라졌었다 — 연속 호출이 같은 미러를 중복 write 한다.
+    if(window._rosterHash===h || window._rosterHashSending===h) return;
+    window._rosterHashSending=h;
+    const _done=()=>{ if(window._rosterHashSending===h) window._rosterHashSending=null; };
+    saengRef.child('roster').set(r).then(()=>{ window._rosterHash=h; _done(); },_done);
   }catch(_){}
+}
+/* 미러(roster)로 shopData·_shopKeyByCd 구성. 성공하면 명단 배열, 실패(빈 미러)면 null.
+   ⚠️ 여기서 만드는 항목은 nm/no/cd 뿐이다 — 교사 코드가 shopData 에서 읽는 필드도 정확히 이 셋이고
+   (쿠키·가방은 언제나 _fetchMyStu 등 개별 경로로 따로 읽는다), 그래서 교사도 미러로 부팅할 수 있다. */
+function _applyRoster(r){
+  if(!r || !Object.keys(r).length) return null;
+  _shopKeyByCd={};
+  const arr=[];
+  Object.keys(r).forEach(c=>{ const v=r[c]||{}; if(v.k!=null) _shopKeyByCd[c]=v.k; arr.push({nm:v.nm||c, no:v.no, cd:c}); });
+  arr.sort((a,b)=>(Number(a.no)||0)-(Number(b.no)||0));   // no 가 문자열로 저장된 레코드도 있다
+  shopData={stu: arr};
+  return arr;
 }
 window.addEventListener('load',()=>{
   initCanvas();
   const _isTch = !!localStorage.getItem('sw_teacher');
-  // 학생 기기: 경량 명단 미러 우선 시도 → 성공하면 EventShop/stu 전체를 받지 않는다.
-  if(!_isTch){
-    saengRef.child('roster').once('value').then(rs=>{
-      const r=rs.val();
-      if(!r || !Object.keys(r).length) return _bootFromStu();   // 미러 없음 → 원본 폴백
-      _shopKeyByCd={};
-      const arr=[];
-      Object.keys(r).forEach(c=>{ const v=r[c]||{}; if(v.k!=null) _shopKeyByCd[c]=v.k; arr.push({nm:v.nm||c, no:v.no, cd:c}); });
-      arr.sort((a,b)=>(Number(a.no)||0)-(Number(b.no)||0));   // no 가 문자열로 저장된 레코드도 있다
-      shopData={stu: arr};
+  // 경량 명단 미러 우선 시도 → 성공하면 EventShop/stu 전체(전교생 inv·아바타, 수백 KB~1MB)를 받지 않는다.
+  // 교사 기기도 같은 경로를 탄다. 원본이 진짜 필요한 두 경로(학생 추가·삭제)는 이미 _readRawStu 로
+  //   그 시점에 따로 읽으므로, 부팅 시 전체 읽기는 중복이었다. 낡은 미러는 _ensureFullStu 의
+  //   자가 치유 가드(개요에 미러에 없는 cd가 보이면 원본 재적재)가 복구한다.
+  saengRef.child('roster').once('value').then(rs=>{
+    const arr=_applyRoster(rs.val());
+    // 미러가 아예 없다 = 선생님 기기가 아직 한 번도 안 열렸다(또는 명단이 비었다).
+    //   이때 학생 기기가 원본으로 폴백하면 30대가 각자 전교생 stu(수백 KB~1MB)를 받고,
+    //   폴백은 미러를 만들지 않으므로(교사만 쓴다) 선생님이 올 때까지 부팅마다 되풀이된다.
+    //   → 학생은 열지 않고 안내한다. 선생님이 한 번 열면 미러가 생겨 바로 해소된다.
+    if(!arr) return _isTch ? _bootFromStu() : _showRosterMissing();
+    if(!_isTch){
       const sc0=localStorage.getItem('sw_stuCode');
       const u0=new URLSearchParams(window.location.search).get('stu');
       // 미러에 내 코드가 없으면(방금 추가된 학생 등) 원본으로 폴백
       if((u0 && !arr.some(s=>s.cd===u0)) || (!u0 && sc0 && !arr.some(s=>s.cd===sc0))) return _bootFromStu();
-      _bootRoute();
-    }).catch(()=>_bootFromStu());
-    return;
-  }
-  _bootFromStu();
-});
-// 원본 EventShop/stu 전체를 받아 부팅(교사, 또는 학생 폴백)
-function _bootFromStu(){
-  // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
-  shopRef.child('stu').once('value',snap=>{
-    const rawStu=snap.val();
-    // cd → Firebase 원래 key 매핑을 여기서 만들어 둔다. 이 부팅 시 1회 읽기로 이미 다 받았으므로
-    //   공짜다. 이게 없으면 쿠키 잔액 하나 보려고 stu 전체 노드를 다시 받아야 한다(제출할 때마다).
-    const _rawEntries=Array.isArray(rawStu)
-      ? rawStu.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
-      : Object.entries(rawStu||{});
-    _shopKeyByCd={};
-    _rawEntries.forEach(([k,v])=>{ if(v&&v.cd!=null&&_shopKeyByCd[String(v.cd).trim()]===undefined) _shopKeyByCd[String(v.cd).trim()]=k; });
-    const stuArrRaw=Array.isArray(rawStu)?rawStu:(rawStu&&typeof rawStu==='object'?Object.values(rawStu):[]);
-    // cd 기준 중복 제거 — Firebase에 정수키/ cd키가 공존하면 같은 학생이 두 번 들어와 화면이 2배로 보이는 문제 방지
-    const _seenCd=new Set();
-    const stuArr=stuArrRaw.filter(s=>{
-      if(!s||!s.cd) return true; // cd 없는 항목은 그대로 둠
-      const c=String(s.cd).trim();
-      if(_seenCd.has(c)) return false;
-      _seenCd.add(c); return true;
-    });
-    shopData={stu: stuArr};
-    // 미러는 교사 기기만 기록한다 — 학생 폴백 경로에서도 이 함수를 타므로, 다수가 동시 폴백하면 중복 write 가 된다.
-    if(localStorage.getItem('sw_teacher')) _syncRoster(_rawEntries);
+    }
     _bootRoute();
+    if(_isTch) _dailyRosterRefresh();
+  // 읽기 실패도 '미러를 쓸 수 없다'는 같은 상황이다 — 위 분기와 같은 처리를 해야 한다.
+  //   (여기만 폴백으로 두면 통신이 불안정한 순간 30대가 각자 전교생 stu 를 받는다)
+  }).catch(()=>{ if(_isTch) _bootFromStu(); else _showRosterMissing(); });
+});
+/* 미러는 학생 추가·삭제 때만 갱신된다. 그런데 이벤트 상점에서 **이름·번호만 바뀐** 경우는
+   cd 가 사라지지 않으므로 자가 치유(_healRosterIfMissing)가 못 잡는다 — 친구 선택 목록·상장·랭킹에
+   옛 이름이 계속 뜬다. 예전엔 교사가 부팅할 때마다 원본을 읽어 저절로 교정됐는데, 그 읽기를
+   없애면서 자가 교정도 같이 사라졌다(트래픽 최적화가 조용히 지운 성질).
+   → 교사 기기에서 **하루 1회만** 원본을 읽어 미러를 다시 쓴다. 새로고침마다가 아니라 하루 한 번이므로
+   절감은 그대로 유지되고(3회/일 → 1회/일), 이름·번호 교정은 되살아난다. */
+/* 명단 미러가 없어 학생 기기를 열지 않을 때의 안내.
+   ⚠️ 여기서 원본(EventShop/stu)을 읽지 않는 것이 요점이다 — 읽어 버리면 막는 의미가 없다.
+   교사 기기는 이 화면을 보지 않는다(원본을 읽어 미러를 만든다). */
+/* 차단 화면에서 교사 로그인으로 빠져나가는 길.
+   ⚠️ 이게 없으면 **교착**이다: 미러는 교사 기기만 만드는데, 아직 한 번도 로그인 안 한 교사 기기는
+   sw_teacher 가 없어 '학생'으로 판정돼 이 화면에 갇힌다(z-index 99999 > 로그인화면 999).
+   첫 사용·전체 초기화 직후에 정확히 그 상황이 된다.
+   학생이 눌러도 안전하다 — 교사 비번은 워커가 검증하고, 학생 코드 로그인은 shopData 가 없어 막힌다. */
+function _rosterMissingTeacherLogin(){
+  try{ document.getElementById('_rosterMissing')?.remove(); }catch(_){}
+  try{
+    const tabs=document.querySelectorAll('.login-tab');
+    const tTab=[...tabs].find(b=>/선생님/.test(b.textContent||''));
+    if(tTab) setLoginMode('teacher', tTab);
+    document.getElementById('teacherCode')?.focus();
+  }catch(_){}
+}
+function _showRosterMissing(){
+  // 중복 방지 — 키오스크 showWalletMissing 과 같은 가드(두 앱의 차단 화면은 같은 규약을 쓴다).
+  //   지금은 then/catch 가 배타적이라 두 번 불릴 일이 없지만, 호출 지점이 늘면 안내가 겹쳐 쌓인다.
+  if(document.getElementById('_rosterMissing')) return;
+  try{ document.body.insertAdjacentHTML('beforeend',
+    `<div id="_rosterMissing" style="position:fixed;inset:0;z-index:99999;background:#FFF0F5;display:flex;
+        align-items:center;justify-content:center;padding:24px;font-family:inherit;">
+      <div style="max-width:420px;text-align:center;background:#fff;border-radius:22px;padding:30px 24px;
+           box-shadow:0 8px 30px rgba(0,0,0,.12);">
+        <div style="font-size:52px;line-height:1;margin-bottom:14px;">🔒</div>
+        <div style="font-size:20px;font-weight:800;color:#C2185B;margin-bottom:10px;">아직 준비 중이에요</div>
+        <div style="font-size:15px;color:#6D4C41;line-height:1.6;">
+          선생님이 먼저 생활기록부를 열어 주셔야 해요.<br>잠시 뒤에 다시 열어 주세요.
+        </div>
+        <button onclick="location.reload()" style="margin-top:20px;padding:12px 26px;border:none;border-radius:14px;
+           background:linear-gradient(135deg,#FF80AB,#F06292);color:#fff;font-family:inherit;font-size:15px;
+           font-weight:800;cursor:pointer;">다시 시도</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid #F8BBD0;">
+          <button onclick="_rosterMissingTeacherLogin()" style="padding:9px 18px;border:1.5px solid #F48FB1;border-radius:12px;
+             background:#fff;color:#C2185B;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;">👑 선생님이신가요? 로그인</button>
+          <div style="margin-top:8px;font-size:12px;color:#A1887F;">선생님이 한 번 로그인하면 명단이 만들어져 모두 들어올 수 있어요.</div>
+        </div>
+      </div>
+    </div>`);
+  }catch(_){}
+  console.warn('[부팅] 명단 미러 없음 — 학생 기기는 원본을 받지 않고 대기한다');
+}
+function _dailyRosterRefresh(){
+  try{
+    // ⚠️ toISOString() 금지 — UTC 기준이라 날짜 경계가 **오전 9시(KST)** 에 떨어진다.
+    //   등교 준비(8:30)와 1교시(9:10)가 서로 다른 'UTC 날'이 되어, 보통의 등교일마다
+    //   하루 두 번 전체를 읽는다(줄이려던 트래픽이 그대로 배로 돌아온다). 로컬 날짜로 판단한다.
+    const d=new Date(_svNow());
+    const today=d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();
+    if(localStorage.getItem('sw_rosterDay')===today) return;
+    // 표식은 **읽기가 성공한 뒤에만** 남긴다 — 실패한 날을 '완료'로 적으면 그날은 영영 교정 안 된다.
+    _ensureFullStu(true).then(arr=>{
+      if(!arr) return;
+      try{ localStorage.setItem('sw_rosterDay',today); }catch(_){}
+    });
+  }catch(_){}
+}
+/* 원본 EventShop/stu 전체를 받아 shopData·_shopKeyByCd 를 재구성(라우팅은 하지 않는다).
+   호출 지점은 셋뿐이다 — 미러 폴백(_bootFromStu), 설정>학생관리 진입, 자가 치유 가드.
+   ⚠️ me 는 건드리지 않는다. 나중 호출(교사)에서 로그인 상태를 흔들면 안 된다. */
+let _fullStuPending=null, _fullStuAt=0;
+// 명단을 로컬에서 고친 횟수(추가/일괄추가/삭제). 진행 중인 전체 읽기가 그 사이의 낙관적 수정을
+//   되돌리지 못하게 하는 표식 — 읽기 시작 시점의 값과 다르면 결과를 버린다.
+let _stuMutSeq=0;
+/* 원본 stu 엔트리([key,값] 배열)를 shopData·_shopKeyByCd 에 적용하고 명단 배열을 돌려준다.
+   _ensureFullStu 와 _refreshRoster 가 공유한다 — 둘 다 같은 노드를 읽으므로 적용도 같아야 한다.
+   (예전엔 _refreshRoster 가 미러만 갱신하고 shopData 는 그대로 둬서, TTL 이 "서버 최신"이라고
+    표시하는데 실제 shopData 는 미러에서 온 경량 객체인 어긋남이 있었다) */
+function _applyRawStu(rawEntries){
+  // cd → Firebase 원래 key 매핑. 이 읽기로 이미 다 받았으므로 공짜다.
+  //   이게 없으면 쿠키 잔액 하나 보려고 stu 전체 노드를 다시 받아야 한다(제출할 때마다).
+  _shopKeyByCd={};
+  rawEntries.forEach(([k,v])=>{ if(v&&v.cd!=null&&_shopKeyByCd[String(v.cd).trim()]===undefined) _shopKeyByCd[String(v.cd).trim()]=k; });
+  // cd 기준 중복 제거 — Firebase에 정수키/ cd키가 공존하면 같은 학생이 두 번 들어와 화면이 2배로 보이는 문제 방지
+  const _seenCd=new Set();
+  const stuArr=rawEntries.map(([_,v])=>v).filter(s=>{
+    if(!s||!s.cd) return true; // cd 없는 항목은 그대로 둠
+    const c=String(s.cd).trim();
+    if(_seenCd.has(c)) return false;
+    _seenCd.add(c); return true;
+  });
+  shopData={stu: stuArr};
+  _fullStuAt=Date.now();
+  // 재렌더를 여기(서버본이 적용되는 유일한 지점)에 둔다 — 호출 지점에 맡겼더니 두 경로가
+  //   각각 다른 표 하나씩만 그리는 비대칭이 두 번 생겼다. 구조적으로 잊을 수 없게 만든다.
+  //   부팅 중 호출도 안전하다: 세 렌더 모두 대상 element/상태가 없으면 스스로 빠진다.
+  _rerenderRosterViews();
+  return stuArr;
+}
+function _ensureFullStu(force){
+  if(_fullStuPending) return _fullStuPending;   // 동시 호출 합류(개요 자가치유가 연달아 부를 수 있다)
+  // 탭 왕복만으로 0.3~1MB 를 반복해 받지 않는다. 명단 수정 직후엔 _refreshRoster 가 같은 노드를
+  //   읽어 shopData 까지 갱신하므로, 여기 TTL 이 낡은 값을 돌려줄 위험은 없다.
+  //   ⚠️ 자가 치유는 반드시 force 로 부를 것 — 캐시를 돌려주면 "누락된 학생"을 영영 못 찾는다.
+  if(!force && _fullStuAt && (Date.now()-_fullStuAt)<60000) return Promise.resolve((shopData&&shopData.stu)||null);
+  const _seqAtStart=_stuMutSeq;
+  // ⚠️ 읽기를 **시작하기 전에** _fullStuPending 을 세운다.
+  //   new Promise(executor) 는 executor 를 동기로 돌리므로, 그 안에서 once() 를 부르면
+  //   대입은 executor 가 끝난 뒤에야 일어난다. Firebase 가 캐시에서 콜백을 **동기로** 주는 순간
+  //   콜백 안에서는 _fullStuPending 이 아직 null 이고, 합류 가드가 무력화된다 →
+  //   _applyRawStu → 재렌더 → 치유 → _ensureFullStu 고리가 합류하지 못하고 재귀한다
+  //   (실측: 읽기 1026회 + 스택 오버플로). 비동기 전달에 기대지 않는다.
+  let _resolveFull;
+  //   ⚠️ 반환도 지역 변수로 한다. 동기 콜백이면 콜백 안의 `_fullStuPending=null` 이
+  //   아래 return 보다 **먼저** 실행돼, 이 함수가 null 을 돌려주고 호출부의 .then 이 터진다
+  //   (_bootFromStu 가 부팅 중 크래시). 필드는 합류용, 반환은 지역 promise.
+  const _p=new Promise(r=>{ _resolveFull=r; });
+  _fullStuPending=_p;
+  {
+    const resolve=_resolveFull;
+    // EventShop 전체 대신 stu 노드만 fetch (drawings 등 대용량 제외)
+    shopRef.child('stu').once('value',snap=>{
+      const rawStu=snap.val();
+      const _rawEntries=Array.isArray(rawStu)
+        ? rawStu.map((v,i)=>[String(i),v]).filter(([_,v])=>v!=null)
+        : Object.entries(rawStu||{});
+      // 읽는 사이에 명단을 고쳤으면(추가/삭제) 이 스냅샷은 이미 낡았다. 덮으면 방금 추가한 학생이
+      //   목록에서 사라진다 — 그 경로가 _refreshRoster 로 서버·미러를 이미 맞춰 놨으므로 버리는 게 맞다.
+      if(_seqAtStart!==_stuMutSeq){ _fullStuPending=null; return resolve((shopData&&shopData.stu)||null); }
+      const stuArr=_applyRawStu(_rawEntries);
+      // 미러는 교사 기기만 기록한다 — 학생 폴백 경로에서도 이 함수를 타므로, 다수가 동시 폴백하면 중복 write 가 된다.
+      if(localStorage.getItem('sw_teacher')) _syncRoster(_rawEntries);
+      _fullStuPending=null;
+      resolve(stuArr);
+    },()=>{ _fullStuPending=null; resolve(null); });   // 읽기 실패도 반드시 resolve — 대기자가 영구히 멈추지 않도록
+  }
+  return _p;
+}
+// 미러가 없거나 쓸 수 없을 때의 원본 부팅
+function _bootFromStu(){ _ensureFullStu().then(()=>_bootRoute()); }
+/* 자가 치유 — 개요/집계에서 명단에 없는 cd 를 만나면 미러가 낡은 것이므로 원본을 한 번 다시 읽는다.
+   이게 없으면 "이벤트 상점에서 방금 추가된 학생이 교사 화면에 안 보임"이 새로고침해도 낫지 않는다.
+   무한 재시도 방지: 한 세션에 한 번만(코드가 진짜로 명단에 없는 유령 기록이면 계속 부를 것이므로). */
+let _rosterHealed=false, _healFailAt=0, _healTries=0;
+const _HEAL_MAX_TRIES=3;   // 세션당 상한 — 아래 주석 참고
+function _healRosterIfMissing(cds,onDone){
+  if(_rosterHealed || !localStorage.getItem('sw_teacher')) return;
+  // 실패 뒤 쿨다운. 읽기가 권한 오류 등으로 즉시 실패하면 기회를 되돌리는 것만으로는
+  //   개요가 다시 그려질 때마다(제출 1건마다) 재시도가 몰린다 — 30초에 한 번으로 묶는다.
+  if(_healFailAt && (Date.now()-_healFailAt)<30000) return;
+  const known=new Set(((shopData&&shopData.stu)||[]).map(s=>String(s.cd).trim()));
+  const miss=(cds||[]).map(c=>String(c).trim()).filter(c=>c && !known.has(c));
+  if(!miss.length) return;
+  // ⚠️ 상한 판정·증가는 반드시 "누락이 있다"를 확인한 **뒤**에 온다.
+  //   앞에 두면 이 함수는 개요가 그려질 때마다(학생 제출 1건마다) 불리므로, 아무 문제 없는
+  //   렌더 세 번만으로 상한이 소진되고 정작 학생이 추가됐을 때 치유가 안 돈다(기능 사망).
+  //   상한이 막으려는 건 "읽기 반복"이지 "호출 반복"이 아니다.
+  // 상한이 없으면 "적용 안 됨 → 기회 반환 → 30초 뒤 재시도"가 세션 내내 반복될 수 있다.
+  //   한 번이 stu 전체(0.3~1MB)라, 2시간이면 최악 수백 MB가 된다. 쿨다운은 속도만 늦출 뿐
+  //   총량을 막지 못한다 — 횟수 상한이 그 역할을 한다.
+  // 방금 서버 원본을 적용했다면 그 명단이 진실이다 — 그래도 없는 cd 는 **지운 학생의 남은 기록**이므로
+  //   또 읽을 이유가 없다. 확인은 끝났으니 기회만 소모하고 끝낸다.
+  //   ⚠️ 이 경로는 드문 게 아니다: 재렌더가 _applyRawStu 안에서 불리고, 학급회의 표는 그려질 때
+  //   자가 치유를 호출한다 → 전체 읽기 직후마다 여기로 들어온다. 이 가드가 없으면 그때마다
+  //   "적용 안 됨"으로 오판해(_fullStuAt 이 이미 갱신돼 전진이 없어 보인다) 기회와 쿨다운을 헛되이 쓴다.
+  //   기회를 **소모하지는 않는다** — 그냥 미룬다. 소모해 버리면 이 5초 사이에 상점에서 추가된
+  //   학생이 세션 내내 안 보인다. 5초가 지난 다음 렌더에서 정상적으로 다시 판단한다.
+  if(_fullStuAt && (Date.now()-_fullStuAt)<5000) return;
+  if(_healTries>=_HEAL_MAX_TRIES) return;
+  _healTries++;
+  _rosterHealed=true;
+  console.warn('[명단 자가치유] 미러에 없는 코드 발견 → 원본 재적재', miss);
+  // ⚠️ force 필수 — 방금(60초 내) 전체를 읽었더라도 그 사이 상점에서 학생이 추가됐을 수 있다.
+  //   캐시를 돌려받으면 누락은 그대로인데 _rosterHealed 만 소모돼 세션 내내 그 학생이 안 보인다.
+  // 기회를 소모할지는 "새 데이터가 실제로 적용됐는가"로 판단한다(_fullStuAt 전진 여부).
+  //   반환값만 보면 부족하다 — 읽기 실패(null)뿐 아니라, 진행 중이던 다른 읽기에 합류했다가
+  //   그 읽기가 낡아서 버려진 경우(_stuMutSeq 불일치)에도 옛 명단이 non-null 로 돌아온다.
+  //   그때 기회를 소모하면 누락 학생이 세션 내내 안 보인다.
+  const _atBefore=_fullStuAt;
+  _ensureFullStu(true).then(()=>{
+    const _applied=(_fullStuAt>_atBefore);
+    if(_applied) _healFailAt=0;                          // 새 데이터가 적용됨 — 그래도 없으면 진짜 없는 것
+    else _healFailAt=Date.now();                         // 적용 안 됨 — 쿨다운을 건다
+    // ⚠️ _rosterHealed 는 onDone **뒤에** 되돌린다. onDone 은 화면을 다시 그리고, 그 화면이 다시
+    //   이 함수를 부른다(렌더⇄치유 고리). 여기서 먼저 false 로 돌리면 그 재진입을 막는 건 쿨다운
+    //   하나뿐이 된다 — 가드 하나에 고리 전체를 걸지 않는다. 순서만 바꾸면 두 겹이 된다.
+    try{ onDone&&onDone(); }catch(_){ }
+    if(!_applied) _rosterHealed=false;                   // 기회는 소모하지 않는다(다음 렌더에서 재시도)
   });
 }
 // 명단이 준비된 뒤의 공통 진입 라우팅(교사/학생 자동 로그인)
@@ -6506,7 +7420,10 @@ function _bootRoute(){
   const urlStu=urlParams.get('stu');
   if(urlStu&&shopData&&shopData.stu){
     const stu=shopData.stu.find(s=>String(s.cd).trim()===urlStu);
-    if(stu){me=stu;localStorage.setItem('sw_stuCode',urlStu);showStudentApp();return;}
+    // ⚠️ localStorage에 저장하지 않는다 — 이건 교사가 특정 학생 화면을 잠깐 열어보는 조회용 링크다.
+    //   저장해버리면, 이 링크가 실수로 학생 태블릿에서 열렸을 때 그 기기의 로그인이
+    //   영구히 그 학생 계정으로 바뀐다(다음부터 파라미터 없이도 자동 로그인). 이 탭 안에서만 유효하게 둔다.
+    if(stu){me=stu;showStudentApp();return;}
   }
   const tc=localStorage.getItem('sw_teacher');
   const sc=localStorage.getItem('sw_stuCode');
